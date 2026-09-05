@@ -463,6 +463,16 @@
       ]
     },
     {
+      "path": "docs/inventory/harness-superpowers-comparison.md",
+      "kind": "inventory",
+      "status": "reference",
+      "language": "zh-CN",
+      "audiences": [
+        "auditor",
+        "maintainer"
+      ]
+    },
+    {
       "path": "docs/archive/README.md",
       "kind": "index",
       "status": "reference",

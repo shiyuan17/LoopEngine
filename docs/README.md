@@ -84,6 +84,7 @@
 - [工作流与澄清能力审查](inventory/workflow-clarification-review.md)
 - [Pre-existing 测试失败处理方案](inventory/preexisting-test-failures-remediation.md)
 - [AI 专属 Eval 体系调查报告](inventory/ai-eval-investigation.md)
+- [Vibe-Harness 与 Superpowers 系统审查](inventory/harness-superpowers-comparison.md)
 
 ## 历史
 
