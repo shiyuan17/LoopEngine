@@ -14,6 +14,7 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
+/** @param {any} catalog @param {{moduleIds?: Set<string>, provisioningToolIds?: Set<string>}} options */
 export function validatePluginProviderCatalog(catalog, { moduleIds, provisioningToolIds } = {}) {
   const errors = validateJsonAgainstSchema(catalog, catalogSchema, 'plugin-providers');
   if (errors.length > 0) return errors;

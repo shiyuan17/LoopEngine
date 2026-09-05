@@ -112,6 +112,7 @@ function resolveDependencies(moduleIds) {
   return selected;
 }
 
+/** @param {{profile?: string, profileGroups?: string[], requestedModules?: string[], requestedPlugins?: any, rolesEnabled?: boolean, rtkHooksEnabled?: boolean}} options */
 export function resolveModuleSelection({
   profile,
   profileGroups = [],

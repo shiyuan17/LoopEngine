@@ -22,9 +22,7 @@ const execFileAsync = promisify(execFile);
 const reportTarget = 'docs/vibe-harness/PROJECT_BASELINE.md';
 
 function baselineError(code, message) {
-  const error = new Error(message);
-  error.code = code;
-  return error;
+  return Object.assign(new Error(message), { code });
 }
 
 function stableObject(value) {

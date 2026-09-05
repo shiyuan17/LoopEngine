@@ -463,6 +463,7 @@ export function validateProjectConfig(config) {
   return true;
 }
 
+/** @param {string[]} installedTargets @param {{exact?: string, prefix?: string, suffix?: string}} options */
 function hasInstalledSurface(installedTargets, { exact, prefix, suffix }) {
   if (exact) {
     return installedTargets.includes(exact);
@@ -482,6 +483,7 @@ const GENERATED_CONTENT_FRAGMENTS = {
   'en-US': ['Edit before', 'red zone', 'manual confirmation', 'verify'],
 };
 
+/** @param {string} content @param {{installedTargets?: string[], skillRoots?: string[]}} options */
 export function validateGeneratedContent(content, { installedTargets, skillRoots } = {}) {
   const passesSomeLanguage = Object.values(GENERATED_CONTENT_FRAGMENTS).some(
     (fragments) => fragments.every((fragment) => content.includes(fragment)),

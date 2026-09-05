@@ -154,7 +154,7 @@ export function createInstalledSurface({ clarificationPosture = 'balanced', cust
   const profileLines = {
     core: '- 当前安装方式：通用安装（不包含扩展 MCP 或 hooks 安装面）。',
     'docs-only': '- 当前安装方式：仅文档安装。',
-    full: '- 当前安装方式：完整能力安装（包含九个原生 Skills、可选 Eval 和 Codex 安全 hooks；memory 与外部工具仅通过 `--plugin` 显式启用）。',
+    full: '- 当前安装方式：完整能力安装（包含十个原生 Skills、可选 Eval 和 Codex 安全 hooks；memory 与外部工具仅通过 `--plugin` 显式启用）。',
     minimal: '- 当前安装方式：最小安装。',
   };
 
@@ -395,6 +395,7 @@ async function planAdapterConfigActions(ctx) {
   return actions;
 }
 
+/** @param {{adapterId?: string, allowPreview?: boolean, configUpdate?: any, dryRun?: boolean, force?: boolean, managedAgentsBlock?: boolean, preserveRetired?: boolean, profile?: string, requestedModules?: string[], requestedPlugins?: any, rtkHooksEnabled?: boolean, renderData?: Record<string, any>, rootDir: string, targetDir: string, upgrade?: boolean}} options */
 export async function createInstallPlan({
   adapterId = 'codex',
   allowPreview = false,
@@ -564,6 +565,7 @@ function compatibleActions(left, right) {
     && JSON.stringify(left.hooks ?? null) === JSON.stringify(right.hooks ?? null);
 }
 
+/** @param {Record<string, any> & {selectedTargets?: string[], targets: string[], rootDir: string, targetDir: string}} options */
 export async function createMultiTargetInstallPlan({ selectedTargets, targets, ...options }) {
   const configuredTargets = [...new Set(targets)];
   const installedState = await readInstallState(path.resolve(options.targetDir));
@@ -1013,6 +1015,7 @@ export async function previewInstallPlan(plan, { includeContent = true } = {}) {
   return previewFiles;
 }
 
+/** @param {{adapterId?: string, allowPreview?: boolean, managedAgentsBlock?: boolean, profile?: string, requestedModules?: string[], requestedPlugins?: any, rtkHooksEnabled?: boolean, renderData?: Record<string, any>, rootDir: string, targetDir: string}} options */
 export async function diffTargetInstall({
   adapterId = 'codex',
   allowPreview = true,
@@ -1213,6 +1216,7 @@ export async function diffTargetInstall({
 
 export const inspectTargetInstall = diffTargetInstall;
 
+/** @param {Record<string, any> & {aggregatePlan?: any, selectedTargets?: string[], targets: string[], rootDir: string, targetDir: string}} options */
 export async function diffMultiTargetInstall({ aggregatePlan, selectedTargets, targets, ...options }) {
   const sampleItems = (items) => items.slice(0, 20);
   const uniqueItems = (items) => [...new Map(items.map((item) => [item.target, item])).values()];
@@ -1230,7 +1234,7 @@ export async function diffMultiTargetInstall({ aggregatePlan, selectedTargets, t
     targets,
   });
   const renderData = { ...options.renderData, installedSurface: plan.renderData.installedSurface };
-  const entries = await Promise.all(activeTargets.map(async (adapterId) => [
+  const entries = /** @type {Array<[string, Record<string, any>]>} */ (await Promise.all(activeTargets.map(async (adapterId) => [
     adapterId,
     await diffTargetInstall({
       ...options,
@@ -1238,7 +1242,7 @@ export async function diffMultiTargetInstall({ aggregatePlan, selectedTargets, t
       rtkHooksEnabled: adapterId === 'codex' && Boolean(options.rtkHooksEnabled),
       renderData: { ...renderData, target: adapterId, targets },
     }),
-  ]));
+  ])));
   const selectedAdapters = Object.fromEntries(entries.map(([adapterId, report]) => {
     const status = !report.ok
       ? 'conflict'

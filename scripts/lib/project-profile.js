@@ -136,6 +136,7 @@ async function readManagedInstallState(targetDir) {
   }
 }
 
+/** @param {string} targetDir @param {(name: string, fullPath: string) => boolean} predicate @param {{currentDir?: string, isManagedPath?: (relativePath: string) => boolean, maxDepth?: number}} options */
 async function findFiles(targetDir, predicate, {
   currentDir = targetDir,
   isManagedPath = () => false,
@@ -330,6 +331,7 @@ async function detectLoggingProfile({ config, targetDir, pkg, packageManager, po
   return withLoggingSummaries({ status: loggingStatus(evidence, contract), evidence, contract });
 }
 
+/** @param {Record<string, any>} profile @param {Record<string, any>} overrides */
 function applyOverrides(profile, overrides = {}) {
   if (!overrides || typeof overrides !== 'object') {
     return profile;
@@ -364,6 +366,7 @@ function withVcsStatusInstruction(profile) {
   };
 }
 
+/** @param {Record<string, any>} config */
 function createGenericProfile(config = {}) {
   return {
     codingStandards: '未发现专用 lint/format 配置；沿用仓库现有代码风格并保持最小改动。',
@@ -384,6 +387,7 @@ function createGenericProfile(config = {}) {
   };
 }
 
+/** @param {{config?: Record<string, any>, targetDir: string}} options */
 export async function detectProjectProfile({ config = {}, targetDir }) {
   const mode = config.projectRules?.mode ?? 'auto';
   if (mode === 'off') {
