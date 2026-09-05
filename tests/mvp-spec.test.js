@@ -348,7 +348,7 @@ test('minimal profile installs the fallback kernel without skills', async () => 
   }
 });
 
-test('core profile installs six native skills without mcp, memory, or hooks', async () => {
+test('core profile installs seven native skills without mcp, memory, or hooks', async () => {
   const { report, target } = await initAndDryRunProfile('core');
   try {
     const targets = targetsFrom(report);
@@ -356,7 +356,7 @@ test('core profile installs six native skills without mcp, memory, or hooks', as
 
     assert.equal(targets.includes('docs/rules/governance-core.md'), true);
     assert.equal(targets.includes('docs/rules/codebase-memory-mcp.md'), false);
-    for (const skill of ['clarify-requirements', 'define-goal', 'git-deliver', 'systematic-debugging', 'eval-driven-development', 'security-and-hardening']) {
+    for (const skill of ['clarify-requirements', 'define-goal', 'task-decomposition', 'git-deliver', 'systematic-debugging', 'eval-driven-development', 'security-and-hardening']) {
       assert.equal(targets.includes(`.agents/skills/${skill}/SKILL.md`), true);
     }
     assert.equal(targets.includes('.agents/skills/agentmemory/SKILL.md'), false);

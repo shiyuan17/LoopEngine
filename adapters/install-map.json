@@ -483,6 +483,24 @@
     },
     {
       "group": "skills-core",
+      "source": "skills/core/task-decomposition/SKILL.md",
+      "target": ".agents/skills/task-decomposition/SKILL.md",
+      "contentStrategy": "replace"
+    },
+    {
+      "group": "skills-core",
+      "source": "skills/core/task-decomposition/references/task-decomposition-guide.md",
+      "target": ".agents/skills/task-decomposition/references/task-decomposition-guide.md",
+      "contentStrategy": "replace"
+    },
+    {
+      "group": "skills-core",
+      "source": "skills/core/task-decomposition/agents/openai.yaml",
+      "target": ".agents/skills/task-decomposition/agents/openai.yaml",
+      "contentStrategy": "replace"
+    },
+    {
+      "group": "skills-core",
       "source": "skills/core/define-goal/agents/openai.yaml",
       "target": ".agents/skills/define-goal/agents/openai.yaml",
       "contentStrategy": "replace"

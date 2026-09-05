@@ -8,7 +8,7 @@
     },
     {
       "id": "core",
-      "description": "通用安装：常规规则、模板、六个聚焦原生 Skills、项目级确定性脚本和可选离线 Eval；外部工具通过 --plugin 显式启用。",
+      "description": "通用安装：常规规则、模板、七个聚焦原生 Skills、项目级确定性脚本和可选离线 Eval；外部工具通过 --plugin 显式启用。",
       "groups": ["agents", "agents-index", "rules-minimal", "rules-core", "templates-minimal", "schemas-core", "runtime-eval", "runtime-project-scripts", "skills-core", "evals-core"]
     },
     {

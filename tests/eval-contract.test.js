@@ -275,6 +275,37 @@ test('eval run schema accepts optional sanitized per-trial diagnostics', async (
   assert.deepEqual(validateJsonAgainstSchema(run, assets.schemas.run, 'run'), []);
 });
 
+test('task-decomposition canaries cover split boundaries and prompt safety', async () => {
+  const suite = await readJson(path.join(rootDir, 'evals/suites/vibe-harness-online-canary.json'));
+  const cases = suite.cases.filter((item) => item.id.startsWith('EVAL-TASK-DECOMPOSITION-'));
+  assert.deepEqual(cases.map((item) => item.id), [
+    'EVAL-TASK-DECOMPOSITION-001',
+    'EVAL-TASK-DECOMPOSITION-002',
+    'EVAL-TASK-DECOMPOSITION-003',
+    'EVAL-TASK-DECOMPOSITION-004',
+    'EVAL-TASK-DECOMPOSITION-005',
+    'EVAL-TASK-DECOMPOSITION-006',
+    'EVAL-TASK-DECOMPOSITION-007',
+    'EVAL-TASK-DECOMPOSITION-008',
+    'EVAL-TASK-DECOMPOSITION-009',
+  ]);
+  for (const item of cases) {
+    assert.deepEqual(item.reporting?.expected?.skills, ['task-decomposition']);
+    assert.equal(item.input.fixture.files[0].path, '.agents/skills/task-decomposition/SKILL.md');
+    assert.equal(item.oracle.requiredOutputFragments.length >= 3, true);
+  }
+  const direct = cases.find((item) => item.id.endsWith('-002'));
+  assert.equal(direct.oracle.forbiddenOutputFragments.some((item) => item.value === 'CREATE_TASK_DAG'), true);
+  const ready = cases.find((item) => item.id.endsWith('-004'));
+  assert.equal(ready.oracle.requiredOutputFragments.some((item) => item.value === 'READY_NODE_COUNT=1'), true);
+  const stop = cases.find((item) => item.id.endsWith('-005'));
+  assert.equal(stop.oracle.requiredOutputFragments.some((item) => item.value === 'NO_SUCCESSOR_EXECUTION'), true);
+  for (const id of ['-006', '-007', '-008', '-009']) {
+    const item = cases.find((candidate) => candidate.id.endsWith(id));
+    assert.equal(item.oracle.requiredOutputFragments.some((fragment) => fragment.value.startsWith('BLOCKED_') || fragment.value === 'EVIDENCE_UNVERIFIED'), true);
+  }
+});
+
 test('RTK and ast-grep rules have reference-backed fallback and evidence cases', async () => {
   const suite = await readJson(path.join(rootDir, 'evals/suites/vibe-harness-core.json'));
   const rtk = suite.cases.find((item) => item.id === 'EVAL-TOOL-RTK-001');

@@ -52,6 +52,16 @@
       "evaluation": { "required": true, "suites": ["evals/goal-definition-cases.json", "evals/suites/vibe-harness-online-canary.json"] }
     },
     {
+      "id": "task-decomposition",
+      "source": "plan-to-Goal/DAG decomposition and host-neutral node execution prompts",
+      "disposition": "generalize",
+      "targets": ["skills/core/task-decomposition/SKILL.md", "docs/rules/AGENT_SKILL_ROUTING.md", "templates/task.md", "manifests/skills.json", "adapters/install-map.json"],
+      "tests": ["tests/skill-closure.test.js", "tests/rules-depth.test.js", "tests/manifest-schema.test.js"],
+      "profiles": ["core", "full"],
+      "docs": ["docs/inventory/skills-optimization-zh.md"],
+      "evaluation": { "required": true, "suites": ["evals/suites/vibe-harness-online-canary.json"] }
+    },
+    {
       "id": "git-and-worktree",
       "source": "GIT_RULES.md",
       "disposition": "generalize",
