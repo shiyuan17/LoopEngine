@@ -94,6 +94,7 @@ const arbitraryRuntimePattern = /(?:^|[\\/])(?:node|npm|npx|pnpm|yarn|python|pyt
 const issueIdentifierPattern = /\b[A-Z][A-Z0-9]{0,15}-[0-9]{1,10}\b/giu;
 const indirectWritePattern = /(?:WriteAllBytes|WriteAllText|writeFileSync|writeFile|appendFileSync|appendFile|createWriteStream|--codex-run-as-apply-patch)/iu;
 
+/** @returns {value is Record<string, any>} */
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -102,11 +103,13 @@ function hasOnlyKeys(value, allowedKeys) {
   return Object.keys(value).every((key) => allowedKeys.has(key));
 }
 
+/** @param {unknown} value @param {{maxLength?: number, minLength?: number}} options */
 function isString(value, { maxLength, minLength = 0 } = {}) {
   if (typeof value !== 'string' || value.length < minLength) return false;
   return maxLength === undefined || value.length <= maxLength;
 }
 
+/** @param {unknown} value @param {{allowedValues?: Set<string>, maxLength?: number, minLength?: number}} options */
 function isUniqueStringArray(value, { allowedValues, maxLength, minLength = 0 } = {}) {
   if (!Array.isArray(value)) return false;
   const seen = new Set();
@@ -880,6 +883,7 @@ function invalidEnvelopeDecision(status) {
   return deny('EXECUTION_ENVELOPE_INVALID', 'The Execution Envelope does not match the supported contract.');
 }
 
+/** @param {Record<string, any>} input @param {{environment?: NodeJS.ProcessEnv, now?: number | Date}} options */
 export function evaluateExecutionEnvelope(input, { environment = process.env, now = Date.now() } = {}) {
   const classification = classifyExecutionEffects(input);
   const required = environment.VIBE_HARNESS_EXECUTION_ENVELOPE_REQUIRED === '1';

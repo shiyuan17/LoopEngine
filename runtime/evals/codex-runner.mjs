@@ -20,6 +20,16 @@ const codexEnvironmentNames = new Set([
   'WINDIR', 'WSLENV', 'all_proxy', 'https_proxy', 'http_proxy', 'no_proxy',
 ]);
 
+function executionRestrictionCategory(text) {
+  if (/(?:workspace|file\s*system|filesystem)[^\n]{0,120}read[- ]only|mounted[^\n]{0,80}read[- ]only|sandbox[^\n]{0,80}read[- ]only/iu.test(text)) {
+    return 'sandbox-write-denied';
+  }
+  if (/(?:shell|command|filesystem|file system)[^\n]{0,100}(?:blocked|rejected|denied)[^\n]{0,80}(?:environment )?policy/iu.test(text)) {
+    return 'policy-denied';
+  }
+  return null;
+}
+
 function codexEnvironment(env) {
   return Object.fromEntries(Object.entries(env).filter(([name]) => codexEnvironmentNames.has(name)));
 }
@@ -133,6 +143,10 @@ async function resolveCodexCommand(backend) {
     } catch {}
   }
   return { args: [], backend, program: 'codex.exe' };
+}
+
+function usesWindowsExecutable(command) {
+  return /(?:^|[\\/])[^\\/]+\.exe$/iu.test(command);
 }
 
 async function wslPath(value, cwd) {
@@ -774,12 +788,13 @@ export function transcript(stdout) {
           if (failed) {
             const errorText = [event.item.message, event.item.text, event.item.aggregated_output, event.item.output]
               .filter((value) => typeof value === 'string').join(' ');
-            let category = 'tool-error';
-            if (/workspace[^\n]*read[- ]only|mounted read[- ]only|sandbox[^\n]*read[- ]only/iu.test(errorText)) category = 'sandbox-write-denied';
-            else if (/plan mode|read[- ]only|cannot edit|editing is disabled/iu.test(errorText)) category = 'mode-restricted';
-            else if (/subagent|child agent|spawn|collaboration/iu.test(errorText)) category = 'agent-tool';
-            else if (/hook|denied|permission|policy/iu.test(errorText)) category = 'policy-denied';
-            else if (/command not found|not recognized as (?:an internal|a cmdlet|the name of)|unknown tool|tool (?:is )?unavailable|unsupported tool/iu.test(errorText)) category = 'tool-unavailable';
+            let category = executionRestrictionCategory(errorText) ?? 'tool-error';
+            if (category === 'tool-error') {
+              if (/plan mode|read[- ]only|cannot edit|editing is disabled/iu.test(errorText)) category = 'mode-restricted';
+              else if (/subagent|child agent|spawn|collaboration/iu.test(errorText)) category = 'agent-tool';
+              else if (/hook|denied|permission|policy/iu.test(errorText)) category = 'policy-denied';
+              else if (/command not found|not recognized as (?:an internal|a cmdlet|the name of)|unknown tool|tool (?:is )?unavailable|unsupported tool/iu.test(errorText)) category = 'tool-unavailable';
+            }
             errorCategories.push(category);
             outcome.fatal = ['sandbox-write-denied', 'policy-denied', 'tool-unavailable'].includes(category);
           }
@@ -841,9 +856,8 @@ export function transcript(stdout) {
             timestamp: event.timestamp ?? new Date(traceEvents.length).toISOString(),
           });
         }
-        if (/workspace[^\n]*read[- ]only|mounted read[- ]only|sandbox[^\n]*read[- ]only/iu.test(text)) {
-          errorCategories.push('sandbox-write-denied');
-        }
+        const restrictionCategory = executionRestrictionCategory(text);
+        if (restrictionCategory) errorCategories.push(restrictionCategory);
         for (const match of text.matchAll(/\[VIBE_HARNESS_POLICY:([A-Z0-9_]+)(?::(\d+))?\]/gu)) {
           const reasonCode = match[1];
           hookReasonCodes.push(reasonCode);
@@ -876,6 +890,12 @@ export function transcript(stdout) {
     toolTypes: [...new Set(toolTypes)],
     workflowEvents,
   };
+}
+
+function hasAgentOrToolEvents(parsed) {
+  return parsed.events.some((event) => ['agent_message', 'reasoning'].includes(event))
+    || parsed.toolInvocations.length > 0
+    || parsed.toolOutcomes.length > 0;
 }
 
 function capturedTraceEvents(parsed) {
@@ -923,9 +943,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     '--disable', 'in_app_browser', '--disable', 'goals', '--disable', 'workspace_dependencies',
     '--model', model, '-c', `model_reasoning_effort=${JSON.stringify(reasoningEffort)}`,
     '-c', 'sandbox_mode="workspace-write"',
+    ...(backend !== 'native' || !usesWindowsExecutable(command.args[0] ?? command.program)
+      ? ['--enable', 'multi_agent', '--enable', 'remote_compaction_v2']
+      : []),
     ...providerArgs(),
   ];
-  const executionWorkspace = backend === 'wsl' ? await wslPath(request.workspace, request.workspace) : request.workspace;
+  const executionWorkspace = backend === 'wsl' && !usesWindowsExecutable(command.args[0] ?? command.program)
+    ? await wslPath(request.workspace, request.workspace)
+    : request.workspace;
   const invocationArgs = request.sessionId
     ? [...command.args, 'exec', 'resume', ...sharedArgs, request.sessionId, request.case.input.scenario]
     : [...command.args, 'exec', ...sharedArgs, '--sandbox', 'workspace-write',
@@ -936,6 +961,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     throw new Error('Codex credentials are missing or invalid');
   }
   const parsed = transcript(result.stdout);
+  if (result.code !== 0 && !hasAgentOrToolEvents(parsed)) {
+    throw new Error('Codex CLI exited before emitting agent or tool events');
+  }
   const workspaceAfter = await workspaceSnapshot(request.workspace);
   const writeSummary = workspaceWriteSummary(request, workspaceBefore, workspaceAfter);
   const expectsWrite = (request.case.input?.fixture?.allowedWritePaths ?? []).length > 0;

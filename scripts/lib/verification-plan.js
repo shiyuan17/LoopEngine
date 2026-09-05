@@ -86,7 +86,7 @@ function classifyGroup(pathname) {
 
 /**
  * @param {string[]} changedPaths
- * @param {{riskZones?: {red?: string[], yellow?: string[], pathPatterns?: {red?: string[], yellow?: string[]}}, changedDetails?: Array<{commentsOnly?: boolean, docsOnly?: boolean, formatOnly?: boolean, publicContract?: boolean, api?: boolean, schema?: boolean, dynamicDependency?: boolean}>}} options
+ * @param {{riskZones?: {red?: string[], yellow?: string[], pathPatterns?: {red?: string[], yellow?: string[]}}, changedDetails?: Array<{changedPath?: string, commentsOnly?: boolean, docsOnly?: boolean, formatOnly?: boolean, publicContract?: boolean, api?: boolean, schema?: boolean, dynamicDependency?: boolean}>}} options
  */
 export function classifyVerificationRisk(changedPaths = [], { riskZones = {}, changedDetails = [] } = {}) {
   const paths = changedPaths.map(normalize);

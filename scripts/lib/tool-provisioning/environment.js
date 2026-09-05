@@ -13,7 +13,11 @@ import { npmInvocation } from './subprocess.js';
 export function detectLinuxLibc() {
   if (process.platform !== 'linux') return null;
   try {
-    return process.report?.getReport?.().header?.glibcVersionRuntime ? 'gnu' : 'musl';
+    const report = process.report?.getReport?.();
+    const header = typeof report === 'object' && report !== null && 'header' in report
+      ? /** @type {Record<string, any>} */ (report).header
+      : null;
+    return header && typeof header === 'object' && header.glibcVersionRuntime ? 'gnu' : 'musl';
   } catch {
     return null;
   }
@@ -105,6 +109,7 @@ function resolveToolSpec(spec, targetDir, mode = 'eager') {
   return { ...spec, mode, toolDir };
 }
 
+/** @param {{allowPreview?: boolean, profile: string, resolvedModules: string[], targetDir: string, toolIds?: string[]}} options */
 export function createToolProvisioningPlan({ allowPreview = false, profile, resolvedModules, targetDir, toolIds }) {
   let plan = [];
   if (Array.isArray(resolvedModules)) {
@@ -175,6 +180,7 @@ export function allowedEnvironment(spec, env) {
   return Object.fromEntries(Object.entries(env).filter(([name]) => allowedNames.has(name)));
 }
 
+/** @param {any} spec @param {string} targetDir @param {NodeJS.ProcessEnv} env @param {{codebaseMemoryCacheDir?: string}} options */
 export async function componentEnvironment(spec, targetDir, env, { codebaseMemoryCacheDir } = {}) {
   const stateRoot = path.join(await projectStateDir(targetDir), 'tool-state');
   const npmCache = path.join(stateRoot, 'npm-cache', spec.id);

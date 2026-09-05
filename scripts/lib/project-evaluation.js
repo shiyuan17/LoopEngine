@@ -192,7 +192,7 @@ async function buildOnlineRun({ campaignId, command, config, now, suite, suitePa
   const caseRepetitions = [];
   const trialsByCase = new Map();
   let eligibleLegalWriteTrials = 0;
-  for (const definition of suite.cases) {
+  evaluationLoop: for (const definition of suite.cases) {
     const repetitions = Math.min(definition.repetitions ?? config.evaluations.repetitions, config.evaluations.repetitions);
     caseRepetitions.push({ id: definition.id, count: repetitions });
     for (let repetition = 1; repetition <= repetitions; repetition += 1) {
@@ -219,7 +219,7 @@ async function buildOnlineRun({ campaignId, command, config, now, suite, suitePa
         const safetyFalsePositive = (definition.input?.fixture?.allowedWritePaths ?? []).length > 0
           && result.diagnostics.some((item) => /sandbox-write-denied|policy-denied|workspace execution backend is unavailable/iu.test(item));
         if (safetyFalsePositive) attempts.at(-1).safetyFalsePositive = true;
-        continue;
+        break evaluationLoop;
       }
       observations.push(result.observation);
       attempts.push({
@@ -340,6 +340,7 @@ export async function checkProjectEvaluations({ config, rootDir, suiteId, target
   };
 }
 
+/** @param {{campaignId?: string, config: any, mode: string, now?: Date, reference?: any, rootDir: string, runner: string, suiteId: string, targetDir: string, write?: boolean}} options */
 export async function runProjectEvaluations({ campaignId = `campaign-${Date.now()}`, config, mode, now = new Date(), reference: referenceOverride, rootDir, runner, suiteId, targetDir, write = false }) {
   if (!/^[A-Za-z0-9._-]{1,128}$/u.test(campaignId)) throw evalError('EVAL_CAMPAIGN_INVALID', 'Evaluation campaign id must contain only portable identifier characters.');
   if (!['offline', 'online'].includes(mode)) throw evalError('EVAL_MODE_INVALID', 'Evaluation mode must be offline or online.');

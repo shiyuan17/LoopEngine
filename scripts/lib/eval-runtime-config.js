@@ -41,6 +41,12 @@ function validateProviderIdentifier(value, label) {
   return normalized;
 }
 
+function windowsPathToWsl(value) {
+  const match = /^([A-Za-z]):[\\/](.*)$/u.exec(value);
+  if (!match) return value;
+  return `/mnt/${match[1].toLowerCase()}/${match[2].replaceAll('\\', '/')}`;
+}
+
 function runtimeHash(environment, repetitions, cliVersion) {
   const value = {
     backend: environment.VIBE_HARNESS_EVAL_CODEX_BACKEND,
@@ -97,12 +103,15 @@ async function windowsCodexScript() {
 
 async function defaultCliVersion({ backend, environment }) {
   if (backend === 'wsl') {
-    if (environment.VIBE_HARNESS_WSL_CODEX_COMMAND) {
-      return executeVersion('wsl.exe', ['-e', environment.VIBE_HARNESS_WSL_CODEX_COMMAND, '--version'], process.env);
-    }
+    const probe = [
+      'candidate=$(command -v "$1" 2>/dev/null) || exit 1',
+      'if grep -q "node\\.exe" "$candidate" && command -v codex.exe >/dev/null 2>&1; then candidate=$(command -v codex.exe); fi',
+      'printf "%s\\n" "$candidate"',
+      '"$candidate" --version',
+    ].join('; ');
     const discovered = await executeVersion(
       'wsl.exe',
-      ['-e', 'sh', '-lc', 'command -v codex && codex --version'],
+      ['-e', 'sh', '-lc', probe, 'vibe-harness-wsl-probe', environment.VIBE_HARNESS_WSL_CODEX_COMMAND ?? 'codex'],
       process.env,
     );
     const [command, ...version] = discovered.split(/\r?\n/u).filter(Boolean);
@@ -134,7 +143,7 @@ async function fromCodexConfig({ backend, env, homeDir }) {
   const home = codexHome(env, homeDir);
   const configPath = path.join(home, 'config.toml');
   if (!await isFile(configPath)) return null;
-  const config = parseToml(await readFile(configPath, 'utf8'));
+  const config = /** @type {Record<string, any>} */ (parseToml(await readFile(configPath, 'utf8')));
   const providerName = config.model_provider === undefined
     ? 'openai'
     : requiredString(config.model_provider, 'Codex config model_provider');
@@ -161,7 +170,11 @@ async function fromCodexConfig({ backend, env, homeDir }) {
     ...(env.VIBE_HARNESS_CODEX_COMMAND
       ? { VIBE_HARNESS_CODEX_COMMAND: env.VIBE_HARNESS_CODEX_COMMAND }
       : (typeof configuredCommand === 'string' && configuredCommand !== '' ? { VIBE_HARNESS_CODEX_COMMAND: configuredCommand } : {})),
-    ...(env.VIBE_HARNESS_WSL_CODEX_COMMAND ? { VIBE_HARNESS_WSL_CODEX_COMMAND: env.VIBE_HARNESS_WSL_CODEX_COMMAND } : {}),
+    ...(env.VIBE_HARNESS_WSL_CODEX_COMMAND
+      ? { VIBE_HARNESS_WSL_CODEX_COMMAND: env.VIBE_HARNESS_WSL_CODEX_COMMAND }
+      : (backend === 'wsl' && typeof configuredCommand === 'string' && configuredCommand !== ''
+        ? { VIBE_HARNESS_WSL_CODEX_COMMAND: windowsPathToWsl(configuredCommand) }
+        : {})),
   };
   return { environment, source: 'codex', unset: ['OPENAI_API_KEY'] };
 }
@@ -198,14 +211,20 @@ export async function resolveEvalRuntime({
 } = {}) {
   const source = validateChoice(env.VIBE_HARNESS_EVAL_RUNTIME_SOURCE ?? 'auto', SOURCES, 'VIBE_HARNESS_EVAL_RUNTIME_SOURCE');
   const configuredBackend = validateChoice(env.VIBE_HARNESS_EVAL_CODEX_BACKEND ?? 'auto', BACKENDS, 'VIBE_HARNESS_EVAL_CODEX_BACKEND');
-  const backend = actualBackend(configuredBackend, needsWrite, platform);
+  let backend = actualBackend(configuredBackend, needsWrite, platform);
   let resolved;
   if (source !== 'env') {
     resolved = await fromCodexConfig({ backend, env, homeDir });
     if (!resolved && source === 'codex') throw new Error('Codex config.toml is required for VIBE_HARNESS_EVAL_RUNTIME_SOURCE=codex');
   }
   resolved ??= fromEnvironment({ backend, env });
-  const cliVersion = await resolveCliVersion({ backend, environment: resolved.environment });
+  let cliVersion = await resolveCliVersion({ backend, environment: resolved.environment });
+  if (configuredBackend === 'auto' && backend === 'wsl' && cliVersion === 'unavailable') {
+    backend = 'native';
+    resolved.environment.VIBE_HARNESS_EVAL_CODEX_BACKEND = backend;
+    delete resolved.environment.VIBE_HARNESS_WSL_CODEX_COMMAND;
+    cliVersion = await resolveCliVersion({ backend, environment: resolved.environment });
+  }
   resolved.environment.CODEX_CLI_VERSION = cliVersion;
   resolved.environment.VIBE_HARNESS_EVAL_RUNTIME_HASH = runtimeHash(resolved.environment, repetitions, cliVersion);
   return { ...resolved, backend, cliVersion };

@@ -141,6 +141,29 @@ test('auto source falls back to environment when Codex config is absent', async 
   }
 });
 
+test('Windows auto backend falls back to native when the WSL CLI is unavailable', async () => {
+  const fixture = await codexFixture();
+  const backends = [];
+  try {
+    const resolved = await resolveEvalRuntime({
+      env: { VIBE_HARNESS_EVAL_RUNTIME_SOURCE: 'codex' },
+      homeDir: fixture.homeDir,
+      needsWrite: true,
+      platform: 'win32',
+      resolveCliVersion: async ({ backend }) => {
+        backends.push(backend);
+        return backend === 'wsl' ? 'unavailable' : 'codex-cli@native';
+      },
+    });
+    assert.deepEqual(backends, ['wsl', 'native']);
+    assert.equal(resolved.backend, 'native');
+    assert.equal(resolved.cliVersion, 'codex-cli@native');
+    assert.equal(resolved.environment.VIBE_HARNESS_EVAL_CODEX_BACKEND, 'native');
+  } finally {
+    await rm(fixture.homeDir, { force: true, recursive: true });
+  }
+});
+
 test('environment runtime rejects invalid third-party provider identifiers', async () => {
   const base = {
     CODEX_MODEL: 'third-party-model',

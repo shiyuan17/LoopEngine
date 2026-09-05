@@ -44,6 +44,7 @@ function selfCheckDenied(adapterId, result) {
   return result?.hookSpecificOutput?.permissionDecision === 'deny';
 }
 
+/** @param {any} adapter @param {string} targetDir @param {{configured?: boolean}} options */
 export async function inspectRuntimeHookSelfCheck(adapter, targetDir, { configured } = {}) {
   if (adapter.hookActivation === 'unsupported') {
     return { status: 'unsupported', code: 'HOOK_SELF_CHECK_UNSUPPORTED' };
@@ -63,6 +64,7 @@ export async function inspectRuntimeHookSelfCheck(adapter, targetDir, { configur
   }
 }
 
+/** @param {any} adapter @param {string} targetDir @param {{hostEvidence?: Record<string, any>, selfCheck?: boolean}} options */
 export async function inspectRuntimeHooks(adapter, targetDir, { hostEvidence = {}, selfCheck = false } = {}) {
   const configTarget = hookConfigTarget(adapter);
   const configured = Boolean(configTarget && await pathExists(path.join(targetDir, configTarget)));

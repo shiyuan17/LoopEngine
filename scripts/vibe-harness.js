@@ -931,6 +931,7 @@ async function auditProject(args) {
   if (report.status === 'degraded') process.exitCode = 1;
 }
 
+/** @param {Record<string, any>} tools @param {string} profile @param {{adapterId?: string, mvp?: boolean}} options */
 function toolRecommendations(tools, profile, { adapterId = 'codex' } = {}) {
   const retryCommand = `vibe-harness provision --project <project> --target ${adapterId} --profile ${profile} --write`;
   return Object.entries(tools).flatMap(([tool, state]) => {
@@ -1352,9 +1353,9 @@ async function main() {
   }
   if (args.profile) validateProfileName(args.profile);
   if (args.target && !mvpTargets.has(args.target)) {
-    const error = new Error('--target only accepts adapter ids codex|claude|gemini|cursor|qoder|zcode|antigravity|opencode; use --project <path> for a project path.');
-    if (command === 'baseline') error.code = 'BASELINE_PROJECT_REQUIRED';
-    throw error;
+    throw Object.assign(new Error('--target only accepts adapter ids codex|claude|gemini|cursor|qoder|zcode|antigravity|opencode; use --project <path> for a project path.'), {
+      ...(command === 'baseline' ? { code: 'BASELINE_PROJECT_REQUIRED' } : {}),
+    });
   }
   if (args.project || command === 'init') {
     await assertNoUnsupportedLegacyAssets(path.resolve(args.project ?? process.cwd()));

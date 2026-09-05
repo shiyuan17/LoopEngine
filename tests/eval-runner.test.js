@@ -198,7 +198,7 @@ test('transcript records only explicit structured handoffs', () => {
 const installedSkillOwners = [
   'agentmemory', 'api-and-interface-design', 'browser-verification', 'clarify-requirements',
   'define-goal', 'eval-driven-development', 'frontend-design', 'runtime-cross-repo-rollout',
-  'security-and-hardening', 'systematic-debugging', 'git-deliver',
+  'security-and-hardening', 'systematic-debugging', 'task-decomposition', 'git-deliver',
 ].map((id) => ({ kind: 'skill', id }));
 
 function coverageEpisode(overrides = {}) {
@@ -245,7 +245,7 @@ test('knowledge coverage distinguishes existing coverage, missing evidence, and 
   assert.equal(confirmed.promotionStatus, 'eligible-for-owner-review');
 });
 
-test('knowledge coverage candidate inventory matches the 11 installed project Skills', async () => {
+test('knowledge coverage candidate inventory matches the 12 installed project Skills', async () => {
   const installed = (await readdir(path.join(rootDir, '.agents/skills'), { withFileTypes: true }))
     .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
   assert.deepEqual(installed, installedSkillOwners.map((owner) => owner.id).sort());
@@ -707,6 +707,86 @@ test('Codex reference runner reports sandbox write denial as degraded infrastruc
     assert.equal(result.exitCode, 2);
     assert.match(result.stderr, /workspace execution backend is unavailable.*sandbox-write-denied/u);
     assert.equal(result.stdout, '');
+  } finally {
+    await rm(workspace, { force: true, recursive: true });
+  }
+});
+
+test('Codex reference runner degrades a non-zero exit with no agent or tool events', async () => {
+  const workspace = await mkdtemp(path.join(tmpdir(), 'vibe-harness-codex-early-exit-'));
+  const fakeCodex = path.join(workspace, 'fake-codex.mjs');
+  await writeFile(fakeCodex, `
+    if (process.argv.includes('--version')) process.stdout.write('fake-codex@early-exit\\n');
+    else {
+      process.stderr.write('provider failed with token=PRIVATE');
+      process.exitCode = 1;
+    }
+  `, 'utf8');
+  try {
+    const result = await runProcess(process.execPath, [path.join(rootDir, 'runtime/evals/codex-runner.mjs')], {
+      cwd: rootDir,
+      env: {
+        ...process.env,
+        CODEX_MODEL: 'fixture',
+        VIBE_HARNESS_CODEX_COMMAND: fakeCodex,
+        VIBE_HARNESS_EVAL_CODEX_BACKEND: 'native',
+      },
+      input: JSON.stringify({
+        schemaVersion: 1,
+        workspace,
+        configHash: 'fixture-v1',
+        case: {
+          id: 'EVAL-CODEX-EARLY-EXIT',
+          input: { scenario: 'Return a response.', fixture: { files: [], allowedWritePaths: [] } },
+          oracle: { requiredArtifacts: [] },
+        },
+      }),
+    });
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /Codex CLI exited before emitting agent or tool events/u);
+    assert.doesNotMatch(result.stderr, /PRIVATE|provider failed/u);
+  } finally {
+    await rm(workspace, { force: true, recursive: true });
+  }
+});
+
+test('Codex reference runner degrades an explicit environment policy restriction', async () => {
+  const workspace = await mkdtemp(path.join(tmpdir(), 'vibe-harness-codex-policy-block-'));
+  const fakeCodex = path.join(workspace, 'fake-codex.mjs');
+  await writeFile(path.join(workspace, 'sum.js'), 'export const sum = (a, b) => a - b;\n', 'utf8');
+  await writeFile(fakeCodex, `
+    if (process.argv.includes('--version')) process.stdout.write('fake-codex@policy-block\\n');
+    else {
+      process.stdout.write(JSON.stringify({
+        type: 'item.completed',
+        item: { type: 'agent_message', text: 'The shell command was blocked before execution by the environment policy. Filesystem access is read-only.' }
+      }) + '\\n');
+    }
+  `, 'utf8');
+  try {
+    const result = await runProcess(process.execPath, [path.join(rootDir, 'runtime/evals/codex-runner.mjs')], {
+      cwd: rootDir,
+      env: {
+        ...process.env,
+        CODEX_MODEL: 'fixture',
+        VIBE_HARNESS_CODEX_COMMAND: fakeCodex,
+        VIBE_HARNESS_EVAL_CODEX_BACKEND: 'native',
+      },
+      input: JSON.stringify({
+        schemaVersion: 1,
+        workspace,
+        configHash: 'fixture-v1',
+        case: {
+          id: 'EVAL-CODEX-POLICY-BLOCK',
+          input: { scenario: 'Fix sum.js.', fixture: { files: [], allowedWritePaths: ['sum.js'] } },
+          oracle: { requiredArtifacts: [] },
+        },
+      }),
+    });
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /workspace execution backend is unavailable.*(?:sandbox-write-denied|policy-denied)/u);
   } finally {
     await rm(workspace, { force: true, recursive: true });
   }

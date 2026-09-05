@@ -57,6 +57,7 @@ async function git(rootDir, args) {
   }
 }
 
+/** @param {string} cwd @param {{gitRoot?: string}} options */
 export async function findProjectRoot(cwd, { gitRoot } = {}) {
   const start = path.resolve(cwd);
   // The bootstrap shim already resolved the git root (one git subprocess ago);

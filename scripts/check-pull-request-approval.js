@@ -20,7 +20,7 @@ async function fetchReviews({ pullNumber, repository, token }) {
       headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + token, 'X-GitHub-Api-Version': '2022-11-28' },
     });
     if (!response.ok) throw new Error('GitHub review query failed with status ' + response.status);
-    const pageItems = await response.json();
+    const pageItems = /** @type {Array<Record<string, any>>} */ (await response.json());
     reviews.push(...pageItems);
     if (pageItems.length < 100) return reviews;
   }

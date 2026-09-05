@@ -41,10 +41,9 @@ function executableFor(program) {
   return { command: program, preArgs: [] };
 }
 
+/** @returns {Error & {code: string, details?: any}} */
 function verificationError(message) {
-  const error = new Error(message);
-  error.code = 'PROJECT_VERIFICATION_FAILED';
-  return error;
+  return Object.assign(new Error(message), { code: 'PROJECT_VERIFICATION_FAILED' });
 }
 
 function verificationOutput(value, targetDir) {
@@ -132,9 +131,9 @@ function executeVerificationCommand(file, args, { cwd, signal, timeoutMs, verifi
       outputLimitExceeded = kind === 'output';
       void terminateVerificationProcess(child).then(() => {
         if (!settled) {
-          const cause = new Error('Verification process did not close after termination.');
-          cause.code = 'PROJECT_VERIFICATION_TERMINATION_TIMEOUT';
-          settle(cause);
+          settle(Object.assign(new Error('Verification process did not close after termination.'), {
+            code: 'PROJECT_VERIFICATION_TERMINATION_TIMEOUT',
+          }));
         }
       });
     };
@@ -153,18 +152,18 @@ function executeVerificationCommand(file, args, { cwd, signal, timeoutMs, verifi
     child.once('close', (code, signalName) => {
       if (settled) return;
       if (terminationRequested) {
-        const cause = new Error('Verification process terminated.');
-        cause.code = typeof code === 'number' ? code : 1;
-        settle(cause);
+        settle(Object.assign(new Error('Verification process terminated.'), {
+          code: typeof code === 'number' ? code : 1,
+        }));
         return;
       }
       if (code === 0) {
         settle();
         return;
       }
-      const cause = new Error(`Verification process exited with ${signalName ?? code}.`);
-      cause.code = typeof code === 'number' ? code : 1;
-      settle(cause);
+      settle(Object.assign(new Error(`Verification process exited with ${signalName ?? code}.`), {
+        code: typeof code === 'number' ? code : 1,
+      }));
     });
     timer = setTimeout(() => requestTermination('timeout'), normalizedTimeoutMs(timeoutMs));
     timer.unref();
@@ -682,6 +681,7 @@ export async function runVerificationPlan({
   };
 }
 
+/** @param {{allowManual?: boolean, commandStatus: any, failureMode?: string, signal?: AbortSignal, targetDir: string, timeoutMs?: number, verificationId?: string | null}} options */
 export async function executeProjectVerification({
   allowManual = false,
   commandStatus,

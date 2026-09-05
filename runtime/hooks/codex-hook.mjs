@@ -71,6 +71,10 @@ async function readStdin() {
   }
 }
 
+/**
+ * @param {unknown} rawInput
+ * @param {{environment?: NodeJS.ProcessEnv, expectedEvent?: string | null, host?: string, now?: number | Date, rtkRunner?: (binary: string, command: string, options?: {cwd?: string, maxOutputBytes?: number, timeoutMs?: number}) => Promise<Record<string, any>>}} options
+ */
 export async function evaluateHook(rawInput, {
   environment = process.env,
   expectedEvent,
@@ -139,6 +143,7 @@ export async function evaluateHook(rawInput, {
   return createHostHookResult(host, input.event, rtkDecision, { durationMs: elapsedMs() });
 }
 
+/** @param {unknown} rawInput @param {{environment?: NodeJS.ProcessEnv, expectedEvent?: string | null, now?: number | Date, rtkRunner?: (binary: string, command: string, options?: {cwd?: string, maxOutputBytes?: number, timeoutMs?: number}) => Promise<Record<string, any>>}} options */
 export async function evaluateCodexHook(rawInput, options = {}) {
   return evaluateHook(rawInput, { ...options, host: 'codex' });
 }

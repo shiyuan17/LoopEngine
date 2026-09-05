@@ -2,7 +2,7 @@
 
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFile, readdir, realpath } from 'node:fs/promises';
+import { access, readFile, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -119,6 +119,14 @@ async function runFile(program, args, { cwd, timeoutMs = 10_000 } = {}) {
 }
 
 async function probeExecutable(program, cwd) {
+  if (path.isAbsolute(program)) {
+    try {
+      await access(program);
+      return true;
+    } catch {
+      return false;
+    }
+  }
   const locator = process.platform === 'win32' ? 'where.exe' : 'which';
   const result = await runFile(locator, [program], { cwd, timeoutMs: 5_000 });
   return result.ok;

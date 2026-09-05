@@ -204,8 +204,9 @@ export async function npmInvocation(args) {
   return { args: [npmCli, ...args], command: process.execPath };
 }
 
+/** @param {Record<string, any>} request @param {{probeTool?: boolean}} options */
 export async function runMcpHandshake(request, { probeTool } = {}) {
-  await new Promise((resolve, reject) => {
+  await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     const child = spawn(request.command, request.args, {
       cwd: request.cwd,
       detached: process.platform !== 'win32',
@@ -291,12 +292,12 @@ export async function runMcpHandshake(request, { probeTool } = {}) {
       method: 'initialize',
       params: { capabilities: {}, clientInfo: { name: productIdentity.command, version: vibeHarnessVersion }, protocolVersion: '2025-03-26' },
     });
-  });
+  }));
 }
 
 export async function defaultPhaseRunner(request) {
   if (request.phase === 'mcp-handshake') return runMcpHandshake(request);
-  if (request.phase === 'browser-smoke') return runMcpHandshake(request, { probeTool: 'list_pages' });
+  if (request.phase === 'browser-smoke') return runMcpHandshake(request, { probeTool: true });
   return defaultCommandRunner(request);
 }
 

@@ -207,6 +207,7 @@ export async function runToolPhases(
   codebaseMemoryRepair = repairCodebaseMemoryBinary,
   { arch = process.arch, platform = process.platform } = {},
 ) {
+  /** @type {Record<string, any>} */
   const context = {};
   const retriedCorruptIndex = new Set();
   for (const phase of phases) {
@@ -223,7 +224,7 @@ export async function runToolPhases(
         const nativePackage = resolveToolNativePackage(spec, { arch, platform });
         if (!nativePackage) throw toolContractError('AST_GREP_UNSUPPORTED_PLATFORM', 'ast-grep has no native package for this platform.');
       }
-      const request = await phaseRequest(spec, phase, targetDir, env, { ...context, arch, platform });
+      const request = /** @type {Record<string, any>} */ (await phaseRequest(spec, phase, targetDir, env, { ...context, arch, platform }));
       request.signal = signal;
       request.timeout = boundedTimeout(env, request.timeout);
       const output = await commandRunner(request);
@@ -254,7 +255,7 @@ export async function runToolPhases(
         && phase === 'index'
         && /(?:binary\s+not\s+found|download\s+failed|install\s+failed)/iu.test(`${error?.message ?? ''}\n${error?.stderr ?? ''}`)
         && await codebaseMemoryRepair(spec)) {
-        const retryRequest = await phaseRequest(spec, phase, targetDir, env, context);
+        const retryRequest = /** @type {Record<string, any>} */ (await phaseRequest(spec, phase, targetDir, env, context));
         retryRequest.signal = signal;
         retryRequest.timeout = boundedTimeout(env, retryRequest.timeout);
         const retryOutput = await commandRunner(retryRequest);
@@ -273,7 +274,7 @@ export async function runToolPhases(
         await assertSafePathInside(targetDir, projectIndexDir, 'codebase-memory project index');
         await rm(projectIndexDir, { force: true, recursive: true });
         context.codebaseMemoryCacheDir = cacheDir;
-        const retryRequest = await phaseRequest(spec, phase, targetDir, env, context);
+        const retryRequest = /** @type {Record<string, any>} */ (await phaseRequest(spec, phase, targetDir, env, context));
         retryRequest.signal = signal;
         retryRequest.timeout = boundedTimeout(env, retryRequest.timeout);
         try {
@@ -390,6 +391,7 @@ export async function defaultRuntimeVersionRunner(request) {
   });
 }
 
+/** @param {any} spec @param {string} code @param {string} message @param {string} targetDir @param {{arch?: NodeJS.Architecture, platform?: NodeJS.Platform}} options */
 function inspectedRuntimeFailure(spec, code, message, targetDir, { arch, platform } = {}) {
   const error = toolContractError(code, message);
   return {

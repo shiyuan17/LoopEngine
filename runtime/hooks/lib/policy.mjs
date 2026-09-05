@@ -88,6 +88,7 @@ function hostEvent(value) {
  * into the policy's host-neutral request shape. These hosts use different key
  * casing, so validation happens before a request reaches the shared policy.
  */
+/** @param {Record<string, any>} value @param {{expectedEvent?: string | null, fallbackCwd?: string, host?: string}} options */
 export function normalizeHostHookInput(value, { expectedEvent, fallbackCwd, host } = {}) {
   if (host === 'codex') return normalizeCodexHookInput(value);
   if (host === 'antigravity') {
@@ -472,6 +473,7 @@ export function analyzeToolRequest(input, {
   return { action: 'deny', reason: risk.reason, reasonCode: risk.reasonCode };
 }
 
+/** @param {string} event @param {Record<string, any>} decision @param {{durationMs?: number}} options */
 export function createCodexHookResult(event, decision, { durationMs } = {}) {
   if (!decision || decision.action === 'allow') return {};
   const durationSuffix = Number.isFinite(durationMs) && durationMs >= 0 ? `:${Math.round(durationMs)}` : '';
@@ -515,6 +517,7 @@ function policyReason(decision, durationMs) {
 }
 
 /** Serialize a host-neutral policy decision using the host's hook contract. */
+/** @param {string} host @param {string} event @param {Record<string, any>} decision @param {{durationMs?: number}} options */
 export function createHostHookResult(host, event, decision, { durationMs } = {}) {
   if (host === 'codex') return createCodexHookResult(event, decision, { durationMs });
   if (host === 'antigravity') {
