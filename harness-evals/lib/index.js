@@ -7,7 +7,13 @@ export { compareAgentConditions } from '../regressions/collaboration.js';
 export { selectScenariosForChanges } from '../regressions/select.js';
 export { buildReport, renderHtmlReport, renderMarkdownReport } from '../reports/report.js';
 export { createHarnessRunner } from '../runners/runner.js';
-export { createCodexCliBackend } from '../runners/codex-cli.js';
+export {
+  ADVANCED_CODEX_CAPABILITIES,
+  DEFAULT_CODEX_CAPABILITIES,
+  createCodexCliBackend,
+  pressureStimulus,
+  pressureTriggerEvidence,
+} from '../runners/codex-cli.js';
 export { analyzeTrace, readTraceBundle, redactTraceValue, toAtifTrace, writeTraceBundle } from '../traces/atif.js';
 export { createFileTraceStore } from '../traces/store.js';
 export { createDeterministicVerifier, runDeterministicCheck } from '../verifiers/deterministic.js';

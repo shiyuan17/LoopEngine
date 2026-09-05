@@ -15,7 +15,7 @@ function escapeHtml(value) {
 }
 
 export function buildReport({ title = 'Harness Eval Report', results = [], comparison = null, generatedAt = new Date().toISOString() } = {}) {
-  const statuses = Object.fromEntries(['passed', 'failed', 'blocked', 'partial'].map((status) => [
+  const statuses = Object.fromEntries(['passed', 'failed', 'blocked', 'partial', 'not-reproduced'].map((status) => [
     status,
     results.filter((result) => result.status === status).length,
   ]));
@@ -30,7 +30,7 @@ export function renderMarkdownReport(report) {
     '',
     `Generated: ${report.generatedAt}`,
     '',
-    `Results: ${report.results.length}; passed ${report.statuses.passed}; failed ${report.statuses.failed}; blocked ${report.statuses.blocked}; partial ${report.statuses.partial}.`,
+    `Results: ${report.results.length}; passed ${report.statuses.passed}; failed ${report.statuses.failed}; blocked ${report.statuses.blocked}; partial ${report.statuses.partial}; RED not reproduced ${report.statuses['not-reproduced']}.`,
     '',
     '| Scenario | Source | Status | Task success | Workflow compliance | Tokens | Wall time |',
     '| --- | --- | --- | --- | --- | --- | --- |',

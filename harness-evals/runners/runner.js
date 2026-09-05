@@ -3,6 +3,8 @@ import { redactTraceValue, toAtifTrace } from '../traces/atif.js';
 
 const REQUIRED_BACKEND_METHODS = ['prepare', 'run', 'resume', 'cancel', 'collect', 'cleanup'];
 
+/** @typedef {Record<string, any>} RunnerRecord */
+
 function assertBackend(backend) {
   if (!backend || typeof backend !== 'object') throw new TypeError('backend is required');
   for (const method of REQUIRED_BACKEND_METHODS) {
@@ -26,7 +28,7 @@ export function createHarnessRunner({
   verifier = { async verify() { return { status: 'passed', checks: [] }; } },
   traceStore,
   now = () => new Date(),
-} = {}) {
+} = /** @type {{backend: RunnerRecord, fixtureManager?: RunnerRecord, verifier?: RunnerRecord, traceStore?: RunnerRecord | ((input: RunnerRecord) => Promise<RunnerRecord>), now?: () => Date}} */ ({})) {
   assertBackend(backend);
   const capabilities = Object.freeze([...(backend.capabilities ?? [])]);
   const executions = new Map();
@@ -54,6 +56,7 @@ export function createHarnessRunner({
   async function executeAttempt(execution, operation, input = {}) {
     if (execution.cleaned) throw new Error(`evaluation execution has been cleaned up: ${execution.executionId}`);
     const ordinal = execution.attempts.length + 1;
+    /** @type {RunnerRecord} */
     const attempt = {
       id: `attempt-${ordinal}`,
       ordinal,
@@ -85,6 +88,7 @@ export function createHarnessRunner({
       const verified = await verifier.verify({
         scenario: execution.scenario,
         fixture: execution.fixture,
+        condition: execution.condition,
         observation: attempt.observation,
         events: attempt.events,
         attempt,
@@ -117,7 +121,7 @@ export function createHarnessRunner({
   return Object.freeze({
     capabilities,
 
-    async prepare({ scenario, fingerprint = {}, condition = {}, budget = {}, agent = {} } = {}) {
+    async prepare({ scenario, fingerprint = {}, condition = {}, budget = {}, agent = {} } = /** @type {{scenario: RunnerRecord, fingerprint?: RunnerRecord, condition?: RunnerRecord, budget?: RunnerRecord, agent?: RunnerRecord}} */ ({})) {
       if (!scenario || typeof scenario.id !== 'string') throw new TypeError('scenario with id is required');
       const missing = requiredCapabilities(scenario).filter((capability) => !capabilities.includes(capability));
       if (missing.length > 0) throw new Error(`runner backend lacks required capabilities: ${missing.join(', ')}`);
@@ -138,6 +142,7 @@ export function createHarnessRunner({
         await fixtureManager.cleanup({ executionId, fixture });
         throw error;
       }
+      /** @type {RunnerRecord} */
       const execution = {
         executionId,
         scenario,

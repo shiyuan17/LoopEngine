@@ -12,6 +12,25 @@ const WINDOWS_PATH = /[a-zA-Z]:\\(?:[^\\\s"']+\\?)*[^\\\s"']*/gu;
 const POSIX_PATH = /(^|[\s"'=(])\/(?!\/)(?:[^/\s"'=]+\/)*[^/\s"'=]*/gu;
 const MAX_TEXT_LENGTH = 64 * 1024;
 
+/** @typedef {Record<string, any>} TraceRecord */
+
+/**
+ * @typedef {object} AtifTraceOptions
+ * @property {string} runId
+ * @property {{name?: string, version?: string, modelName?: string, model?: string, extra?: TraceRecord}} [agent]
+ * @property {TraceRecord[]} [events]
+ * @property {{inputTokens?: number, outputTokens?: number, cachedTokens?: number, costUsd?: number, toolCalls?: number}} [metrics]
+ * @property {TraceRecord[]} [subagents]
+ * @property {TraceRecord} [extra]
+ */
+
+/**
+ * @typedef {object} TraceBundleOptions
+ * @property {TraceRecord} trace
+ * @property {TraceRecord[]} [events]
+ * @property {TraceRecord[]} [artifacts]
+ */
+
 function redactText(value) {
   const redacted = value
     .replace(SECRET_TEXT, '<redacted>')
@@ -89,7 +108,8 @@ function stepFromEvent(event, index) {
   };
 }
 
-export function toAtifTrace({ runId, agent = {}, events = [], metrics = {}, subagents = [], extra = {} } = {}) {
+/** @param {AtifTraceOptions} options */
+export function toAtifTrace({ runId, agent = {}, events = [], metrics = {}, subagents = [], extra = {} } = /** @type {AtifTraceOptions} */ ({})) {
   if (!Array.isArray(events) || !Array.isArray(subagents)) throw new TypeError('events and subagents must be arrays');
   const trace = {
     schema_version: 'ATIF-v1.8',
@@ -112,7 +132,7 @@ export function toAtifTrace({ runId, agent = {}, events = [], metrics = {}, suba
     ...(subagents.length > 0 ? {
       subagent_trajectories: subagents.map((subagent) => subagent.schema_version === 'ATIF-v1.8'
         ? subagent
-        : toAtifTrace(subagent)),
+        : toAtifTrace(/** @type {AtifTraceOptions} */ (subagent))),
     } : {}),
     extra: {
       harness: {
@@ -130,7 +150,11 @@ async function atomicWriteJson(target, value) {
   await rename(temporary, target);
 }
 
-export async function writeTraceBundle(directory, { trace, events = [], artifacts = [] } = {}) {
+/**
+ * @param {string} directory
+ * @param {TraceBundleOptions} options
+ */
+export async function writeTraceBundle(directory, { trace, events = [], artifacts = [] } = /** @type {TraceBundleOptions} */ ({})) {
   if (!trace || trace.schema_version !== 'ATIF-v1.8') throw new TypeError('trace must use ATIF-v1.8');
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await Promise.all([

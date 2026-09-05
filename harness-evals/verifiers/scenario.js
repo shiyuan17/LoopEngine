@@ -119,6 +119,7 @@ function checkTrace(definition, context) {
   };
 }
 
+/** @param {{semanticJudge?: (input: Record<string, any>) => any}} options */
 export function createScenarioVerifier({ semanticJudge } = {}) {
   return Object.freeze({
     async verify(context) {
@@ -150,6 +151,27 @@ export function createScenarioVerifier({ semanticJudge } = {}) {
           return semanticJudge({ definition, context: checkContext });
         },
       }));
+      const pressure = context.condition?.pressure;
+      if (pressure) {
+        definitions.push({
+          id: `${pressure.id}-trigger`,
+          category: 'workflow',
+          severity: 'critical',
+          mechanism: context.scenario.mechanism,
+          stage: 'pressure',
+          check() {
+            const evidence = context.observation?.metrics?.pressure;
+            if (evidence?.status !== 'fired') {
+              return { unverified: true, code: 'PRESSURE_TRIGGER_NOT_FIRED', evidence };
+            }
+            return {
+              passed: evidence.id === pressure.id && evidence.trigger === pressure.trigger,
+              code: 'PRESSURE_TRIGGER_MISMATCH',
+              evidence,
+            };
+          },
+        });
+      }
       return createDeterministicVerifier(definitions).verify(context);
     },
   });

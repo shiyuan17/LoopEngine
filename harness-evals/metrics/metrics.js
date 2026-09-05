@@ -42,6 +42,11 @@ function attemptEvents(attempts) {
   return attempts.flatMap((attempt) => attempt.events ?? []);
 }
 
+/**
+ * @param {Array<Record<string, any>>} events
+ * @param {string} type
+ * @param {(event: Record<string, any>) => boolean} [predicate]
+ */
 function countEvents(events, type, predicate = () => true) {
   return events.filter((event) => event.type === type && predicate(event)).length;
 }
@@ -58,6 +63,10 @@ function repeatedSearches(events) {
   return repeated;
 }
 
+/**
+ * @param {Array<Record<string, any>>} attempts
+ * @param {string} key
+ */
 function totalTelemetry(attempts, key) {
   const values = attempts.map((attempt) => attempt[key]).filter(Number.isFinite);
   return {
@@ -66,6 +75,7 @@ function totalTelemetry(attempts, key) {
   };
 }
 
+/** @param {{attempts?: Array<Record<string, any>>, checks?: Array<Record<string, any>>}} options */
 export function buildMetrics({ attempts = [], checks = [] } = {}) {
   const adjudicated = attempts.filter((attempt) => ADJUDICATED_ATTEMPT_STATUSES.has(attempt.status));
   const passed = adjudicated.filter((attempt) => attempt.status === 'passed').length;

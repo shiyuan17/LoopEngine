@@ -43,6 +43,20 @@ test('harness eval plan reports capability blocks instead of simulating support'
   assert.deepEqual(plan.entries.find((entry) => entry.scenarioId === 'H20').missingCapabilities, ['resume']);
 });
 
+test('RED dry runs require and resolve an immutable pre-change Harness revision', async () => {
+  await assert.rejects(
+    run(['run', '--phase', 'red', '--dry-run', '--scenario', 'H04']),
+    /--harness-ref is required/iu,
+  );
+  const { stdout } = await run([
+    'run', '--phase', 'red', '--harness-ref', 'HEAD~1', '--dry-run', '--scenario', 'H04',
+  ]);
+  const plan = JSON.parse(stdout);
+  assert.equal(plan.experiment.phase, 'red');
+  assert.match(plan.experiment.harnessRevision, /^[a-f0-9]{40}$/u);
+  assert.equal(plan.experiment.harnessRef, 'HEAD~1');
+});
+
 test('report, baseline, compare, and trace analysis commands consume Result v3', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'harness-evals-cli-'));
   try {

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { buildMetrics } from '../metrics/metrics.js';
-import { redactTraceValue } from '../traces/atif.js';
+import { analyzeTrace, redactTraceValue } from '../traces/atif.js';
 
 function portableId(value, label) {
   if (typeof value !== 'string' || !/^[A-Za-z0-9._-]{1,160}$/u.test(value)) {
@@ -24,6 +24,23 @@ const FAILURE_CATEGORY = Object.freeze({
   workflow: 'Rule Failure',
 });
 
+/**
+ * @typedef {object} ResultBuildOptions
+ * @property {Record<string, any>} scenario
+ * @property {Array<Record<string, any>>} [attempts]
+ * @property {Array<Record<string, any>>} [checks]
+ * @property {Array<Record<string, any>>} [traceRefs]
+ * @property {{measurement?: Record<string, any>, harness?: Record<string, any>}} [fingerprint]
+ * @property {string} [generatedAt]
+ * @property {Record<string, any>} [source]
+ * @property {Array<Record<string, any>>} [failures]
+ * @property {Record<string, any>} [metrics]
+ * @property {unknown} [official]
+ * @property {unknown} [external]
+ * @property {Record<string, any>} [analysis]
+ */
+
+/** @param {ResultBuildOptions} options */
 export function buildResultV3({
   scenario,
   attempts = [],
@@ -36,7 +53,8 @@ export function buildResultV3({
   metrics,
   official,
   external,
-} = {}) {
+  analysis,
+} = /** @type {ResultBuildOptions} */ ({})) {
   if (!scenario || typeof scenario !== 'object') throw new TypeError('scenario is required');
   portableId(scenario.id, 'scenario.id');
   if (!Array.isArray(attempts) || !Array.isArray(checks) || !Array.isArray(traceRefs)) {
@@ -46,13 +64,17 @@ export function buildResultV3({
   const adjudicated = attempts.filter((attempt) => ['passed', 'failed'].includes(attempt.status));
   const hasBlocked = attempts.some((attempt) => ['blocked', 'cancelled', 'degraded'].includes(attempt.status))
     || checks.some((check) => ['blocked', 'unverified'].includes(check.status));
-  const status = criticalFailures.length > 0 || adjudicated.some((attempt) => attempt.status === 'failed')
+  const baseStatus = criticalFailures.length > 0 || adjudicated.some((attempt) => attempt.status === 'failed')
     ? 'failed'
     : hasBlocked || adjudicated.length === 0
       ? 'blocked'
       : adjudicated.every((attempt) => attempt.status === 'passed')
         ? 'passed'
         : 'partial';
+  const isPassingRed = baseStatus === 'passed'
+    && attempts.length > 0
+    && attempts.every((attempt) => attempt.phase === 'red');
+  const status = isPassingRed ? 'not-reproduced' : baseStatus;
   const normalizedFingerprint = {
     measurement: fingerprint.measurement ?? {},
     harness: fingerprint.harness ?? {},
@@ -62,6 +84,11 @@ export function buildResultV3({
     code: check.code ?? check.id,
     checkId: check.id,
   }));
+  const traceAvailable = attempts.some((attempt) => Array.isArray(attempt.events));
+  const normalizedAnalysis = analysis ?? analyzeTrace(
+    traceAvailable ? { steps: attempts.flatMap((attempt) => attempt.events ?? []) } : null,
+    checks,
+  );
 
   return redactTraceValue({
     schemaVersion: 3,
@@ -100,6 +127,7 @@ export function buildResultV3({
         : { state: 'unavailable', refs: [], missingReason: 'trace-not-provided' },
     },
     failures: normalizedFailures,
+    analysis: normalizedAnalysis,
     ...(official === undefined ? {} : { official }),
     ...(external === undefined ? {} : { external }),
   });

@@ -6,7 +6,8 @@ function hash(value) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
-export function createBaseline({ id, results = [], generatedAt = new Date().toISOString(), approved = false } = {}) {
+/** @param {{id: string, results?: Array<Record<string, any>>, generatedAt?: string, approved?: boolean}} options */
+export function createBaseline({ id, results = [], generatedAt = new Date().toISOString(), approved = false } = /** @type {{id: string}} */ ({})) {
   if (typeof id !== 'string' || !/^[A-Za-z0-9._-]{1,160}$/u.test(id)) throw new TypeError('baseline id must be a portable identifier');
   if (!Array.isArray(results) || results.some((result) => result.schemaVersion !== 3)) {
     throw new TypeError('baseline results must use schemaVersion 3');

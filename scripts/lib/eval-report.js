@@ -18,6 +18,7 @@ function percentile(values, quantile) {
   return round(lower === upper ? sorted[lower] : sorted[lower] + (sorted[upper] - sorted[lower]) * (index - lower), 2);
 }
 
+/** @param {number} numerator @param {number} denominator @param {{collected?: number, eligible?: number, state?: string, total?: number | null}} options */
 function measured(numerator, denominator, { collected = denominator, eligible = denominator, state, total = denominator } = {}) {
   const resolved = state ?? (denominator === 0 ? 'na' : 'value');
   return {
@@ -54,11 +55,21 @@ function trialRows(run, suite) {
   })));
 }
 
+/** @returns {{collected: number, eligible: number, total: number, cachedInputTokens: number, inputTokens: number, outputTokens: number, reasoningOutputTokens: number, totalTokens: number}} */
 function aggregateTokens(trials) {
   const fields = ['cachedInputTokens', 'inputTokens', 'outputTokens', 'reasoningOutputTokens', 'totalTokens'];
   const collectedTrials = trials.filter((item) => item.trial.toolSummary?.tokenUsage);
-  const usage = Object.fromEntries(fields.map((field) => [field, sum(collectedTrials, (item) => item.trial.toolSummary.tokenUsage[field])]));
-  return { collected: collectedTrials.length, eligible: trials.length, total: trials.length, ...usage };
+  const usage = /** @type {Record<string, number>} */ (Object.fromEntries(fields.map((field) => [field, sum(collectedTrials, (item) => item.trial.toolSummary.tokenUsage[field])])))
+  return {
+    collected: collectedTrials.length,
+    eligible: trials.length,
+    total: trials.length,
+    cachedInputTokens: usage.cachedInputTokens ?? 0,
+    inputTokens: usage.inputTokens ?? 0,
+    outputTokens: usage.outputTokens ?? 0,
+    reasoningOutputTokens: usage.reasoningOutputTokens ?? 0,
+    totalTokens: usage.totalTokens ?? 0,
+  };
 }
 
 function latency(trials) {
@@ -239,6 +250,7 @@ export function assessRunComparison(current, comparison) {
   return { compatible: true, reason: '同指纹、同 Suite', state: 'value' };
 }
 
+/** @param {{canaryAttempts?: any[], canaryComparisonRun?: any, canaryRun: any, canarySuite: any, executionAttempts?: any[], executionComparisonRun?: any, executionRun: any, executionSuite: any}} options */
 export function buildEvalReportModel({
   canaryAttempts = [], canaryComparisonRun, canaryRun, canarySuite,
   executionAttempts = [], executionComparisonRun, executionRun, executionSuite,
@@ -494,7 +506,7 @@ export function renderEvalReport(model) {
     card('测试通过率', percent(m.testPassRate), '隐藏行为与 API 测试', m.testPassRate, tone(m.testPassRate, (v) => v === 1)),
     card('基础设施健康率', percent(m.infrastructureHealthRate), '同 campaign ready / started', m.infrastructureHealthRate, tone(m.infrastructureHealthRate, (v) => v === 1)),
   ].join('');
-  const groups = [
+  const groups = /** @type {Array<[string, string[]]>} */ ([
     ['交付质量', [
       card('架构/边界违规事件', number(m.architectureViolations), '事件数，不等同文件数', m.architectureViolations, tone(m.architectureViolations, (v) => v === 0)),
       card('误修改文件数', number(m.unintendedFiles), '允许路径之外的变化文件', m.unintendedFiles, tone(m.unintendedFiles, (v) => v === 0)),
@@ -524,7 +536,7 @@ export function renderEvalReport(model) {
       card('错误恢复率', percent(m.recoveryRate), '可恢复工具错误后最终通过', m.recoveryRate, m.recoveryRate.state),
       card('Token 总消耗', new Intl.NumberFormat('zh-CN').format(m.tokenUsage.totalTokens), `input ${new Intl.NumberFormat('zh-CN').format(m.tokenUsage.inputTokens)} · cached ${new Intl.NumberFormat('zh-CN').format(m.tokenUsage.cachedInputTokens)} · output ${new Intl.NumberFormat('zh-CN').format(m.tokenUsage.outputTokens)}`, m.tokenUsage, m.tokenUsage.collected < m.tokenUsage.total ? 'partial' : 'neutral'),
     ]],
-  ].map(([title, cards]) => `<section class="metric-group"><h3>${title}</h3><div class="metrics">${cards.join('')}</div></section>`).join('');
+  ]).map(([title, cards]) => `<section class="metric-group"><h3>${title}</h3><div class="metrics">${cards.join('')}</div></section>`).join('');
   const qualityCards = [
     card('稳定性覆盖', `${m.stablePassRate.eligible}/${m.stablePassRate.total} cases`, '只对 repetitions > 1 评价稳定性', m.stablePassRate, m.stablePassRate.eligible === m.stablePassRate.total ? 'good' : 'partial'),
     card('未知工具终态', String(m.toolUnknown), '不进入有效结果率分母', m.toolEffectiveResultRate, m.toolUnknown === 0 ? 'good' : 'warn'),

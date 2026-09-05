@@ -91,6 +91,10 @@ function initialFiles(manifest) {
   ]));
 }
 
+/**
+ * @param {Record<string, any>} manifest
+ * @param {{baseDir?: string}} options
+ */
 export async function materializeFixture(manifest, { baseDir = tmpdir() } = {}) {
   if (!manifest || manifest.schemaVersion !== 1 || typeof manifest.id !== 'string') {
     throw new TypeError('fixture manifest schemaVersion 1 with an id is required');
@@ -125,7 +129,10 @@ export async function materializeFixture(manifest, { baseDir = tmpdir() } = {}) 
   }
 }
 
-export function createFixtureManager({ scenariosDir, baseDir, projectHarness } = {}) {
+/**
+ * @param {{scenariosDir: string, baseDir?: string, projectHarness?: (context: Record<string, any>) => Promise<void>}} options
+ */
+export function createFixtureManager({ scenariosDir, baseDir, projectHarness } = /** @type {{scenariosDir: string}} */ ({})) {
   if (!path.isAbsolute(scenariosDir ?? '')) throw new TypeError('scenariosDir must be absolute');
   const fixtureDir = path.resolve(scenariosDir, '../fixtures');
   return Object.freeze({

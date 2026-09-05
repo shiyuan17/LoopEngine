@@ -65,6 +65,7 @@ function llmRubricAssertionResult(assertion, judgeOutput) {
   };
 }
 
+/** @param {any} oracle @param {any} observation @param {{scenario?: string, judge?: any}} options */
 async function evaluateOracle(oracle, observation, { scenario, judge } = {}) {
   const assertions = [];
   const events = observation.events ?? [];
@@ -103,6 +104,7 @@ async function evaluateOracle(oracle, observation, { scenario, judge } = {}) {
   return assertions;
 }
 
+/** @param {{definition: any, observation: any, judge?: any}} options */
 export async function scoreCase({ definition, observation, judge }) {
   const assertions = await evaluateOracle(definition.oracle, observation, {
     scenario: definition.input?.scenario ?? '',

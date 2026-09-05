@@ -60,7 +60,7 @@ rules、runtime hooks 或 config 内容变更会使 `evals/references/` 的 asse
 
 1. 确认指纹漂移分组与本轮预期变更一致（本轮只改 rules 时，漂移就应只有 rules 组）。
 2. 出现非预期分组漂移时先回到代码查因，不盲目再生成。
-3. 使用正规入口再生成：先 `pnpm vibe-harness eval run --project . --write` 得到 run 文件（`.vibe-harness/evals/runs/<timestamp>.json`），再 `pnpm vibe-harness eval reference --project . --from <run 文件> --write --confirm-reference-update`；命令细节见 `docs/evals.md`。同步 `evals/results/` 与 `.agents/evals/` 镜像。
+3. 使用正规入口再生成：先 `pnpm vibe-harness eval run --project . --mode offline --write` 得到 run 文件（`.vibe-harness/evals/runs/<timestamp>.json`），再 `pnpm vibe-harness eval reference --project . --from <run 文件> --write --confirm-reference-update`；命令细节见 `docs/evals.md`。同步 `evals/results/` 与 `.agents/evals/` 镜像。
 4. 重跑 `pnpm eval:check` 与 `pnpm eval:replay` 确认通过，并在 PR 说明中记录漂移分组与确认依据。
 
 ## Pull Request

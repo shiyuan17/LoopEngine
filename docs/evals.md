@@ -58,6 +58,8 @@ When OPENAI_BASE_URL is missing, the scheduled canary fails configuration valida
 
 `VIBE_HARNESS_EVAL_RUNTIME_SOURCE=auto|codex|env` 选择 runtime 来源。`auto` 优先从本机 Codex `config.toml`/`auth.json` 原子读取 model、provider、base URL、wire API、reasoning、CLI 路径和对应 auth；只提取这些白名单字段，不继承 hooks、plugins、MCP、notify 或项目信任状态。显式 `CODEX_MODEL` 可覆盖配置中的 model，但仍复用同一 provider/auth；Codex 配置不存在时回退 `CODEX_MODEL`、`CODEX_REASONING_EFFORT`、`OPENAI_API_KEY` 与可选 `OPENAI_BASE_URL`。
 
+Windows 写入型 Eval 的 `auto` backend 仅接受可在 WSL 内原生执行的 Codex CLI；Windows pnpm shim 不会被当作 Linux CLI。WSL CLI 不可用时回退 native，若 native workspace policy 仍拒绝执行，则 run 记录为 infrastructure `degraded`，不进入行为判分。
+
 `VIBE_HARNESS_EVAL_CODEX_BACKEND=auto|native|wsl` 选择执行后端。Windows `auto` 对声明写入的 execution suite 使用 WSL2，对只读 canary 使用 native；Linux/CI 使用 native。实际 provider/base URL/reasoning/backend/repetitions/CLI 版本进入 `configHash`，凭据不进入 fingerprint。WSL/Codex 不可用或 sandbox 拒绝写入时 run 为 degraded，不计为模型失败。
 
 fixture 可声明 `allowedWritePaths`，其成员必须是 workspace 内的可移植相对路径，默认空数组。runner 比较执行前后快照；任何未声明的创建、修改或删除都会产生 `undeclared-workspace-write`，对已有 fixture 的修改同时保留 `existing-file-overwritten` 兼容事件。execution 的测试命令只由 harness 执行，不作为可见 fixture 暴露给模型。
@@ -110,6 +112,8 @@ pnpm eval:harness check
 pnpm eval:harness plan --tier fast
 pnpm eval:harness plan --tier fast --changed docs/rules/test-rules.md
 pnpm eval:harness run --tier fast --scenario H04 --attempts 1
+pnpm eval:harness run --tier fast --scenario H04 --phase red --harness-ref <pre-change-commit>
+pnpm eval:harness run --tier fast --scenario H04 --phase pressure --pressure H04-P1
 pnpm eval:harness analyze --trace <bundle-dir> --result <results.json>
 pnpm eval:harness baseline --input <results.json> --id <candidate-id> --output <baseline.json>
 pnpm eval:harness compare --baseline <baseline.json> --current <results.json>
@@ -118,6 +122,8 @@ pnpm eval:harness report --input <results.json> --format html --output <report.h
 
 `check` 验证 20 个 Internal Scenario、Fixture、统一 Schema 与锁定的 External 样例清单。`plan` 根据后端真实能力和预算输出 ready、partial、not-scheduled、blocked；不支持的原生子 Agent、故障注入、compaction、恢复、Worktree 或合并能力不能用合成事件代替。未知变更影响回退完整核心集。
 
-`run` 在隔离临时项目中投影当前 Harness，隐藏 oracle 与证据目录位于 Agent 写入范围之外。每次 attempt 使用独立 Fixture，结果保存为 Result v3，并生成 JSON、Markdown、HTML 与脱敏 ATIF。生成物默认位于 `harness-evals/reports/generated/` 和 `harness-evals/traces/runs/`，不提交；批准 reference 仍需独立显式流程。
+`run` 在隔离临时项目中投影指定 Harness，隐藏 oracle 与证据目录位于 Agent 写入范围之外。RED 必须用 `--harness-ref` 绑定与当前 HEAD 不同的旧提交；旧提交从临时 detached worktree 投影，revision 与内容 hash 写入 Harness fingerprint。RED 若通过，Result 状态是 `not-reproduced`，不能冒充失败复现。Pressure 可用 `--pressure <scenario-pressure-id>` 选择变体；任务开始类刺激直接注入，事件类刺激仅在 Trace 命中声明 trigger 后通过同一 session 注入，未触发或无法恢复时 critical check 为 `unverified`。
+
+每次 attempt 使用独立 Fixture，结果保存为 Result v3，并生成 JSON、Markdown、HTML 与脱敏 ATIF。Result 的 `analysis` 会自动按失败 check 生成 taxonomy、首个可见偏差、证据强度和待验证因果假设；独立 `analyze` 命令用于重新分析已有 Trace。生成物默认位于 `harness-evals/reports/generated/` 和 `harness-evals/traces/runs/`，不提交；批准 reference 仍需独立显式流程。
 
 External Adapter 只规划并归一化官方 SWE-bench、SWE-bench Live、Harbor/Terminal-Bench 与 CooperBench 命令。官方依赖留在 `harness-evals/external/` 的运行环境中；缺少官方 CLI、锁定数据集或 Docker 资源时结果为 blocked，不以样例 fixture 冒充真实基准运行。

@@ -53,7 +53,7 @@ test('fixture materialization keeps hidden checks outside the Agent workspace an
   try {
     assert.deepEqual(Object.keys(fixture.agent).sort(), ['id', 'workspace', 'worktrees']);
     await assert.rejects(access(path.join(fixture.agent.workspace, 'oracle')));
-    assert.match(fixture.controller.hiddenChecks[0].args[0], /\/oracle\/check\.mjs$/u);
+    assert.match(fixture.controller.hiddenChecks[0].args[0].replaceAll('\\', '/'), /\/oracle\/check\.mjs$/u);
     assert.doesNotMatch(await readFile(path.join(fixture.agent.workspace, 'src/format.js'), 'utf8'), /\\n$/u);
     const [featureA, featureB] = await Promise.all([
       execFileAsync('git', ['show', 'feature-a:src/format.js'], { cwd: fixture.agent.workspace }),
@@ -121,6 +121,22 @@ test('scenario verifier negative controls reject broken output and stale verific
       events: [],
     });
     assert.equal(verified.status, 'passed');
+
+    const unfiredPressure = await verifier.verify({
+      scenario,
+      fixture,
+      condition: { pressure: scenario.phase.pressure[0] },
+      observation: {
+        exitCode: 0,
+        metrics: {
+          finalChangeValidation: { status: 'verified' },
+          pressure: { id: 'H04-P1', status: 'unverified', trigger: 'after-final-write' },
+        },
+      },
+      events: [],
+    });
+    assert.equal(unfiredPressure.status, 'blocked');
+    assert.equal(unfiredPressure.checks.find((check) => check.id === 'H04-P1-trigger').status, 'unverified');
   } finally {
     await manager.cleanup({ fixture });
   }

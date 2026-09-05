@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +13,8 @@ import {
   compareResults,
   createBaseline,
   createCodexCliBackend,
+  ADVANCED_CODEX_CAPABILITIES,
+  DEFAULT_CODEX_CAPABILITIES,
   createFileTraceStore,
   createFixtureManager,
   createHarnessRunner,
@@ -78,10 +81,10 @@ function requestedScenarios(args) {
   return typeof args.scenario === 'string' ? args.scenario.split(',').map((value) => value.trim()).filter(Boolean) : [];
 }
 
-async function hashPaths(relativePaths) {
+async function hashPaths(baseDir, relativePaths) {
   const hash = createHash('sha256');
   async function visit(relative) {
-    const absolute = path.join(rootDir, relative);
+    const absolute = path.join(baseDir, relative);
     const entries = await readdir(absolute, { withFileTypes: true });
     for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
       const child = path.join(relative, entry.name);
@@ -89,7 +92,7 @@ async function hashPaths(relativePaths) {
       else if (entry.isFile()) {
         hash.update(child.replaceAll('\\', '/'));
         hash.update('\0');
-        hash.update(await readFile(path.join(rootDir, child)));
+        hash.update(await readFile(path.join(baseDir, child)));
         hash.update('\0');
       }
     }
@@ -98,7 +101,59 @@ async function hashPaths(relativePaths) {
   return hash.digest('hex');
 }
 
+async function resolveHarnessExperiment(args) {
+  const phase = args.phase ?? 'regression';
+  if (!['red', 'green', 'pressure', 'regression'].includes(phase)) {
+    throw new Error('--phase must be red, green, pressure, or regression');
+  }
+  if (phase === 'red' && typeof args['harness-ref'] !== 'string') {
+    throw new Error('--harness-ref is required for a RED run');
+  }
+  const harnessRef = args['harness-ref'] ?? 'HEAD';
+  const [harnessRevision, currentRevision] = await Promise.all([
+    execute('git', ['rev-parse', `${harnessRef}^{commit}`], rootDir).then((result) => result.output.trim()),
+    execute('git', ['rev-parse', 'HEAD'], rootDir).then((result) => result.output.trim()),
+  ]);
+  if (phase === 'red' && harnessRevision === currentRevision) {
+    throw new Error('--harness-ref for a RED run must resolve to a pre-change revision, not HEAD');
+  }
+  return { phase, harnessRef, harnessRevision, currentRevision };
+}
+
+async function prepareHarnessSource(experiment) {
+  if (experiment.harnessRevision === experiment.currentRevision) {
+    return { root: rootDir, async cleanup() {} };
+  }
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'vibe-harness-eval-source-'));
+  const checkout = path.join(temporaryRoot, 'checkout');
+  let added = false;
+  try {
+    await execute('git', ['worktree', 'add', '--detach', checkout, experiment.harnessRevision], rootDir);
+    added = true;
+    const modules = path.join(rootDir, 'node_modules');
+    await access(modules);
+    await symlink(modules, path.join(checkout, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+    return {
+      root: checkout,
+      async cleanup() {
+        try {
+          await execute('git', ['worktree', 'remove', '--force', checkout], rootDir);
+        } finally {
+          await rm(temporaryRoot, { recursive: true, force: true });
+        }
+      },
+    };
+  } catch (error) {
+    if (added) {
+      try { await execute('git', ['worktree', 'remove', '--force', checkout], rootDir); } catch {}
+    }
+    await rm(temporaryRoot, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 async function externalContractCheck() {
+  /** @type {Array<[string, {discover: (manifest: any) => any[]}]>} */
   const definitions = [
     ['swe-bench/sample-manifest.json', sweBenchAdapter],
     ['swe-bench/live-sample-manifest.json', sweBenchLiveAdapter],
@@ -160,10 +215,10 @@ async function planCommand(args, backendCapabilities) {
   return impact ? { ...plan, impact } : plan;
 }
 
-function blockedResult(scenario, entry, fingerprint, code = 'BACKEND_CAPABILITY_UNAVAILABLE') {
+function blockedResult(scenario, entry, fingerprint, phase, code = 'BACKEND_CAPABILITY_UNAVAILABLE') {
   return buildResultV3({
     scenario,
-    attempts: [{ id: 'attempt-1', phase: 'regression', status: 'blocked' }],
+    attempts: [{ id: 'attempt-1', phase, status: 'blocked' }],
     checks: [{
       id: `${scenario.id}-preflight`, category: 'infrastructure', severity: 'critical', status: 'blocked', code,
       evidence: { missingCapabilities: entry.missingCapabilities },
@@ -173,15 +228,16 @@ function blockedResult(scenario, entry, fingerprint, code = 'BACKEND_CAPABILITY_
   });
 }
 
-async function projectHarness({ fixture }) {
-  await execute(process.execPath, [path.join(rootDir, 'scripts/vibe-harness.js'), 'init', '--project', fixture.agent.workspace, '--target', 'codex', '--profile', 'full', '--force'], rootDir);
+async function projectHarness(harnessRoot, { fixture }) {
+  await execute(process.execPath, [path.join(harnessRoot, 'scripts/vibe-harness.js'), 'init', '--project', fixture.agent.workspace, '--target', 'codex', '--profile', 'full', '--force'], harnessRoot);
   await execute(process.execPath, [
-    path.join(rootDir, 'scripts/vibe-harness.js'), 'install', '--project', fixture.agent.workspace,
+    path.join(harnessRoot, 'scripts/vibe-harness.js'), 'install', '--project', fixture.agent.workspace,
     '--target', 'codex', '--profile', 'full', '--write', '--allow-degraded', '--confirm-red-zone',
-  ], rootDir);
+  ], harnessRoot);
 }
 
 async function runCommand(args) {
+  const experiment = await resolveHarnessExperiment(args);
   let runtime;
   let runtimeError;
   try {
@@ -189,8 +245,13 @@ async function runCommand(args) {
   } catch (error) {
     runtimeError = error;
   }
+  const linuxCodex = runtime?.backend === 'wsl'
+    && !String(runtime.environment.VIBE_HARNESS_WSL_CODEX_COMMAND ?? '').toLowerCase().endsWith('.exe');
   const backend = createCodexCliBackend({
     rootDir,
+    capabilities: linuxCodex
+      ? [...DEFAULT_CODEX_CAPABILITIES, ...ADVANCED_CODEX_CAPABILITIES]
+      : DEFAULT_CODEX_CAPABILITIES,
     resolveRuntime: async () => {
       if (runtimeError) throw runtimeError;
       return runtime;
@@ -198,18 +259,28 @@ async function runCommand(args) {
   });
   const plan = await planCommand(args, backend.capabilities);
   if (args['dry-run']) {
-    console.log(JSON.stringify(plan, null, 2));
+    console.log(JSON.stringify({ ...plan, experiment }, null, 2));
     return;
   }
+  const harnessSource = await prepareHarnessSource(experiment);
+  try {
   const catalog = await loadHarnessEvalCatalog(rootDir);
   const byId = new Map(catalog.scenarios.map((scenario) => [scenario.id, scenario]));
   const runId = `run-${new Date().toISOString().replace(/[^0-9A-Za-z]/gu, '-')}`;
   const outputDir = path.resolve(args['output-dir'] ?? path.join(rootDir, 'harness-evals/reports/generated', runId));
   const traceRoot = path.join(rootDir, 'harness-evals/traces/runs', runId);
-  const harnessHash = await hashPaths(['docs/rules', 'skills/core', 'templates', 'adapters']);
+  const harnessHash = await hashPaths(harnessSource.root, ['docs/rules', 'skills/core', 'templates', 'adapters']);
   const results = [];
   for (const entry of plan.entries) {
     const scenario = byId.get(entry.scenarioId);
+    const requestedPressure = experiment.phase === 'pressure'
+      ? scenario.phase.pressure.find((candidate) => candidate.id === args.pressure)
+        ?? (args.pressure ? null : scenario.phase.pressure[0])
+      : null;
+    if (experiment.phase !== 'pressure' && args.pressure) throw new Error('--pressure requires --phase pressure');
+    if (experiment.phase === 'pressure' && !requestedPressure) {
+      throw new Error(`unknown pressure id for ${scenario.id}: ${args.pressure}`);
+    }
     const fixtureManifest = await readFile(path.resolve(path.join(rootDir, 'harness-evals/scenarios'), scenario.fixture.ref), 'utf8');
     const fingerprint = {
       measurement: {
@@ -222,14 +293,21 @@ async function runCommand(args) {
         architecture: process.arch,
         tier: plan.tier,
         repetitions: entry.scheduledAttempts,
+        phase: experiment.phase,
+        pressureId: requestedPressure?.id ?? null,
       },
-      harness: { aggregateHash: harnessHash },
+      harness: {
+        aggregateHash: harnessHash,
+        ref: experiment.harnessRef,
+        revision: experiment.harnessRevision,
+      },
     };
     if (entry.status === 'blocked' || entry.scheduledAttempts === 0) {
       results.push(blockedResult(
         scenario,
         entry,
         fingerprint,
+        experiment.phase,
         entry.status === 'blocked' ? 'BACKEND_CAPABILITY_UNAVAILABLE' : 'BUDGET_EXHAUSTED',
       ));
       continue;
@@ -240,21 +318,24 @@ async function runCommand(args) {
     for (let repetition = 1; repetition <= entry.scheduledAttempts; repetition += 1) {
       const runner = createHarnessRunner({
         backend,
-        fixtureManager: createFixtureManager({ scenariosDir: catalog.scenariosDir, projectHarness }),
+        fixtureManager: createFixtureManager({
+          scenariosDir: catalog.scenariosDir,
+          projectHarness: (context) => projectHarness(harnessSource.root, /** @type {{fixture: any}} */ (context)),
+        }),
         verifier: createScenarioVerifier(),
         traceStore: createFileTraceStore(traceRoot),
       });
       let execution;
       try {
-        execution = await runner.prepare({ scenario, fingerprint, condition: { tier: plan.tier }, budget: { attemptLimit: 1, wallTimeMs: Number(args['wall-time-ms'] ?? 600_000) } });
-        await runner.run(execution.executionId, { phase: args.phase ?? 'regression' });
+        execution = await runner.prepare({ scenario, fingerprint, condition: { tier: plan.tier, pressure: requestedPressure }, budget: { attemptLimit: 1, wallTimeMs: Number(args['wall-time-ms'] ?? 600_000) } });
+        await runner.run(execution.executionId, { phase: experiment.phase, pressure: requestedPressure });
         const collected = await runner.collect(execution.executionId);
         const attemptId = `attempt-${repetition}`;
         attempts.push(...collected.attempts.map((attempt) => ({ ...attempt, id: attemptId })));
         checks.push(...collected.checks);
         traceRefs.push(...collected.evidence.trace.refs.map((ref) => ({ ...ref, attemptId })));
       } catch (error) {
-        attempts.push({ id: `attempt-${repetition}`, phase: args.phase ?? 'regression', status: 'degraded', diagnostics: [error.message] });
+        attempts.push({ id: `attempt-${repetition}`, phase: experiment.phase, status: 'degraded', diagnostics: [error.message] });
         checks.push({ id: `${scenario.id}-infrastructure-${repetition}`, category: 'infrastructure', severity: 'critical', status: 'blocked', code: 'RUN_PREPARE_FAILED' });
       } finally {
         if (execution) await runner.cleanup(execution.executionId);
@@ -271,6 +352,9 @@ async function runCommand(args) {
   ]);
   console.log(JSON.stringify({ runId, outputDir, plan: plan.summary, statuses: report.statuses }, null, 2));
   if (results.some((result) => result.status === 'failed')) process.exitCode = 1;
+  } finally {
+    await harnessSource.cleanup();
+  }
 }
 
 function resultsFrom(document) {

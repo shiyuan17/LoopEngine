@@ -40,7 +40,7 @@ The controller, verifier, and semantic judge are evaluation infrastructure. Thei
 | Verifier | Combines independent checks and optional semantic judging. It never relies on an agent's self-report. | Final workspace, trace, checks, hidden assets. | Outcome, workflow, evidence-integrity, and infrastructure verdicts. |
 | Trace | Preserves observable execution without claiming private model reasoning. | Native runner events, tool calls, messages, Git snapshots, verifier events. | Redacted ATIF trajectory, correlated event stream, artifact index, integrity receipt. |
 | Metrics | Computes explicitly defined counts, ratios, coverage, and missing-data reasons. | Result attempts and traces. | Outcome, workflow, agent, coordination, and efficiency measurements. |
-| Result | Unifies Internal and External outcomes. | Attempts, checks, trace refs, metrics, fingerprints. | Result v3 JSON and report-ready summary. |
+| Result | Unifies Internal and External outcomes and attaches automatic observable failure analysis. | Attempts, checks, trace refs, metrics, fingerprints. | Result v3 JSON, `analysis`, and report-ready summary. |
 | Baseline | Freezes comparable measurement conditions and a Harness fingerprint. | Approved result set. | Immutable candidate or approved baseline. |
 | Regression | Compares only compatible result sets and surfaces new failure modes. | Baseline and current results. | Improved, regressed, equivalent, and insufficient-evidence groups. |
 
@@ -97,10 +97,10 @@ Verifier tests establish final correctness. Workflow checks separately establish
 
 ## Experiment phases
 
-- **RED** runs the pre-change Harness with a frozen model, backend, budget, task, fixture, and verifier. An already passing run is recorded as `not-reproduced`; the Harness is not weakened to manufacture a failure.
+- **RED** requires an immutable pre-change Git revision and runs that detached Harness snapshot with a frozen model, backend, budget, task, fixture, and verifier. An already passing run is recorded as `not-reproduced`; the Harness is not weakened to manufacture a failure.
 - **Verifier negative control** feeds a known-bad artifact or trajectory to the checks. It validates the evaluator and is never reported as an Agent RED run.
 - **GREEN** repeats RED measurement conditions after the smallest trace-supported Harness change.
-- **Pressure** adds one deterministic trigger, then a two-factor combination, while keeping the base task and verifier constant.
+- **Pressure** adds one deterministic trigger, then a two-factor combination, while keeping the base task and verifier constant. Task-start stimuli are injected with the initial request; event stimuli are injected through the same resumable Agent session only after the named event appears in Trace. An unfired trigger is `unverified`.
 - **Regression** selects affected scenarios plus the fixed critical set and retains every failed, degraded, blocked, and cancelled attempt.
 
 ## Metrics and failure analysis
@@ -114,6 +114,8 @@ All ratios report numerator, denominator, coverage, and missing-data reason. The
 - Collaboration: parent bottleneck time, unnecessary delegation, and total/agent/coordination/judge cost partitions.
 
 Trace findings use `rule`, `planning`, `reasoning`, `tool`, `context`, `coordination`, `verification`, `recovery`, or `infrastructure`. Fixture, verifier, and collector defects are separate infrastructure-origin codes. Each finding names the first observable deviation, evidence reference, affected Harness mechanism, evidence strength, and a way to validate the causal hypothesis. Causality requires a controlled comparison or ablation.
+
+Every Result v3 contains automatic `analysis` derived from its checks and available Trace evidence. The analysis attributes observable failure classes; `likelyCause` remains unset unless a controlled comparison or ablation supports causality.
 
 ## Baselines, comparison, and run tiers
 

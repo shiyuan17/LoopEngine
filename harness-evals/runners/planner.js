@@ -5,13 +5,14 @@ function repetitions(scenario, tier) {
   return scenario.phase.regression.repetitions[tier] ?? (tier === 'fast' ? 1 : tier === 'nightly' ? 3 : 5);
 }
 
+/** @param {{scenarios: Array<Record<string, any>>, tier?: string, scenarioIds?: string[], backendCapabilities?: string[], attemptLimit?: number}} options */
 export function planHarnessEval({
   scenarios,
   tier = 'fast',
   scenarioIds = [],
   backendCapabilities = [],
   attemptLimit = Number.POSITIVE_INFINITY,
-} = {}) {
+} = /** @type {{scenarios: Array<Record<string, any>>}} */ ({})) {
   if (!Array.isArray(scenarios)) throw new TypeError('scenarios must be an array');
   if (!TIERS.has(tier)) throw new Error('tier must be fast, nightly, or full');
   const requested = scenarioIds.length > 0

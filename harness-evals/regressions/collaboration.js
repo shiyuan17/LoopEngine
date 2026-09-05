@@ -8,7 +8,8 @@ function relativeImprovement(single, multi) {
   return (single - multi) / single;
 }
 
-export function compareAgentConditions({ single, multi, rateThreshold = 0.05, efficiencyThreshold = 0.10 } = {}) {
+/** @param {{single: Record<string, any>, multi: Record<string, any>, rateThreshold?: number, efficiencyThreshold?: number}} options */
+export function compareAgentConditions({ single, multi, rateThreshold = 0.05, efficiencyThreshold = 0.10 } = /** @type {{single: Record<string, any>, multi: Record<string, any>}} */ ({})) {
   if (single?.schemaVersion !== 3 || multi?.schemaVersion !== 3) throw new TypeError('single and multi Result v3 values are required');
   if (single.scenario.id !== multi.scenario.id) throw new Error('single and multi results must use the same scenario');
   const successDelta = metric(multi, 'outcome', 'taskSuccessRate') === null || metric(single, 'outcome', 'taskSuccessRate') === null

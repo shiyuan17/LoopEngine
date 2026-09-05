@@ -4,8 +4,8 @@ const VALID_STATUSES = new Set(['passed', 'failed', 'blocked', 'unverified', 'no
 
 function normalizeResult(definition, raw) {
   if (raw?.applicable === false) return { status: 'not-applicable' };
-  if (raw?.blocked === true) return { status: 'blocked' };
-  if (raw?.unverified === true) return { status: 'unverified' };
+  if (raw?.blocked === true) return { ...raw, status: 'blocked' };
+  if (raw?.unverified === true) return { ...raw, status: 'unverified' };
   if (typeof raw?.passed !== 'boolean') {
     return { status: 'blocked', code: 'CHECK_INVALID_RESULT', diagnostic: 'check did not return a boolean passed field' };
   }

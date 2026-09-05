@@ -51,7 +51,8 @@ function comparePair(baseline, candidate, thresholds) {
   };
 }
 
-export function compareResults({ baseline, candidateResults = [], thresholds = DEFAULT_THRESHOLDS } = {}) {
+/** @param {{baseline: {results: Array<Record<string, any>>}, candidateResults?: Array<Record<string, any>>, thresholds?: {rate: number, efficiency: number}}} options */
+export function compareResults({ baseline, candidateResults = [], thresholds = DEFAULT_THRESHOLDS } = /** @type {{baseline: {results: Array<Record<string, any>>}}} */ ({})) {
   if (!baseline || !Array.isArray(baseline.results)) throw new TypeError('baseline with results is required');
   if (!Array.isArray(candidateResults)) throw new TypeError('candidateResults must be an array');
   const baselineByKey = new Map(baseline.results.map((result) => [key(result), result]));

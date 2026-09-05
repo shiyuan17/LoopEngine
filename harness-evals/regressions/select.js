@@ -1,4 +1,7 @@
-export function selectScenariosForChanges({ changedPaths = [], impactMap, allScenarioIds = [] } = {}) {
+/**
+ * @param {{changedPaths?: string[], impactMap: {fixedCritical?: string[], rules: Array<{prefix: string, scenarios: string[]}>}, allScenarioIds?: string[]}} options
+ */
+export function selectScenariosForChanges({ changedPaths = [], impactMap, allScenarioIds = [] } = /** @type {{impactMap: {rules: Array<{prefix: string, scenarios: string[]}>}}} */ ({})) {
   if (!Array.isArray(changedPaths) || !impactMap || !Array.isArray(impactMap.rules)) {
     throw new TypeError('changedPaths and an impact map are required');
   }

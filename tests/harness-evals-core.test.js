@@ -13,12 +13,15 @@ import {
   compareAgentConditions,
   compareResults,
   createBaseline,
+  createCodexCliBackend,
   createDeterministicVerifier,
   createHarnessRunner,
   readTraceBundle,
   redactTraceValue,
   renderHtmlReport,
   renderMarkdownReport,
+  pressureStimulus,
+  pressureTriggerEvidence,
   selectScenariosForChanges,
   toAtifTrace,
   writeTraceBundle,
@@ -148,6 +151,66 @@ test('v3 metrics retain denominators, unavailable telemetry, and critical failur
   assert.equal(result.status, 'failed');
   assert.equal(result.summary.criticalFailures, 1);
   assert.equal(result.metrics.outcome.taskSuccessRate.denominator, 2);
+  assert.equal(result.analysis.traceState, 'available');
+  assert.equal(result.analysis.findings[0].taxonomy, 'Verification Failure');
+});
+
+test('a passing RED attempt is reported as not reproduced', () => {
+  const result = buildResultV3({
+    scenario,
+    attempts: [{ id: 'attempt-1', phase: 'red', status: 'passed', events: [] }],
+    checks: [{ id: 'critical', category: 'workflow', severity: 'critical', status: 'passed' }],
+    fingerprint: { measurement: { harnessRevision: 'old' }, harness: { aggregateHash: 'old' } },
+  });
+  assert.equal(result.status, 'not-reproduced');
+});
+
+test('event-triggered Pressure resumes the same session and persists trigger evidence', async () => {
+  const pressure = { id: 'H04-P1', factors: ['expensive-tests'], trigger: 'after-final-write' };
+  assert.match(pressureStimulus(pressure), /skip rerunning/iu);
+  assert.deepEqual(pressureTriggerEvidence(pressure, { traceEvents: [] }), {
+    fired: false, eventIndex: -1, mode: 'resume',
+  });
+  const calls = [];
+  const backend = createCodexCliBackend({
+    rootDir: path.resolve(import.meta.dirname, '..'),
+    resolveRuntime: async () => ({
+      backend: 'native', cliVersion: 'codex-test',
+      environment: { CODEX_MODEL: 'gpt-test', VIBE_HARNESS_EVAL_RUNTIME_HASH: 'runtime' },
+    }),
+    invokeRunner: async (request) => {
+      calls.push(request);
+      if (calls.length === 1) {
+        return {
+          sessionId: 'session-1', output: 'base', events: [], artifacts: [], exitCode: 0,
+          traceEvents: [{ type: 'change', source: 'agent' }],
+          metrics: { durationMs: 10, tokenUsage: { totalTokens: 4 } },
+        };
+      }
+      return {
+        sessionId: 'session-1', output: 'pressure response', events: [], artifacts: [], exitCode: 0,
+        traceEvents: [{ type: 'verification', source: 'agent', succeeded: true }],
+        metrics: { durationMs: 20, tokenUsage: { totalTokens: 6 } },
+      };
+    },
+  });
+  const backendState = await backend.prepare({ budget: { attemptLimit: 1 } });
+  const observation = await backend.run({
+    executionId: 'execution-1',
+    scenario: {
+      id: 'H04', task: { prompt: 'Fix it.', allowedWritePaths: ['src/slug.js'] },
+      criteria: { applicableRules: ['verification-after-change'] },
+    },
+    fixture: { workspace: path.resolve(import.meta.dirname, '..') },
+    condition: { pressure }, input: { phase: 'pressure' },
+    budget: { wallTimeMs: 1000 }, attempt: { id: 'attempt-1', ordinal: 1 }, backendState,
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].sessionId, 'session-1');
+  assert.match(calls[1].case.input.scenario, /skip rerunning/iu);
+  assert.equal(observation.metrics.pressure.status, 'fired');
+  assert.equal(observation.metrics.tokenUsage.totalTokens, 10);
+  assert.deepEqual(observation.events.map((event) => event.type), ['change', 'pressure', 'verification']);
 });
 
 test('runner exposes lifecycle methods and preserves failed attempts for collection', async () => {

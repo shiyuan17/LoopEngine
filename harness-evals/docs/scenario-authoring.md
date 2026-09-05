@@ -48,9 +48,9 @@ All critical checks must pass. `blocked` and `unverified` cannot be converted to
 
 ## Phase and pressure discipline
 
-RED is a real pre-change run. If it passes, report `not-reproduced`. GREEN repeats the same task, model, runner, fixture revision, checks, and budget. Pressure changes only the declared pressure stimulus. Regression preserves all attempts and runs the affected set plus the fixed critical scenarios.
+RED is a real pre-change run bound to an immutable Git revision that differs from current HEAD. If it passes, report `not-reproduced`. GREEN repeats the same task, model, runner, fixture revision, checks, and budget. Pressure changes only the declared pressure stimulus. Regression preserves all attempts and runs the affected set plus the fixed critical scenarios.
 
-Pressure prompts are appended or injected at the declared trace trigger. Do not expose oracle answers. Random timing is not an acceptable trigger; use a named event such as the first test failure, first completed child, or context checkpoint.
+Pressure prompts are injected at the declared trace trigger. Task-start triggers may be included in the initial request; later triggers require a resumable Agent session and a matching Trace event before injection. The controller persists the pressure ID, trigger, event index, and fired state; an absent trigger is `unverified`. Do not expose oracle answers. Random timing is not an acceptable trigger; use a named event such as the first test failure, first completed child, or context checkpoint.
 
 ## Review checklist
 
