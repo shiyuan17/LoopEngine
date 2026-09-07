@@ -8,7 +8,7 @@ The single source of truth is manifests/adapters.json. PreToolUse is stable on C
 
 PreToolUse enforces destructive-Git, global-configuration, credential, egress, red-zone, and project-boundary controls. PermissionRequest enforces the same hard boundaries while leaving ordinary approval to the host.
 
-Execution Envelope enforcement is active when the host injects an envelope or the parent process sets VIBE_HARNESS_EXECUTION_ENVELOPE_REQUIRED=1. The required switch is deliberately parent-owned; repository files are not an authorization root. Without host injection and durable request/checkpoint state, the installed Hook remains defense in depth and must not be reported as complete host-level execution authorization.
+When hooks are active, high-risk effects require an Execution Envelope even without explicit injection. A host-injected envelope or parent-owned VIBE_HARNESS_EXECUTION_ENVELOPE_REQUIRED=1 also enforces the envelope for other effectful calls, including when hooks.mode is off. Low-risk project writes do not require an envelope when neither is present. The required switch is deliberately parent-owned; repository files are not an authorization root. Without host injection and durable request/checkpoint state, the installed Hook remains defense in depth and must not be reported as complete host-level execution authorization.
 
 ## Path resolution
 
