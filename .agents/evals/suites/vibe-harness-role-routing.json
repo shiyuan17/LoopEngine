@@ -16,6 +16,7 @@
         "fixture": { "files": [{ "path": "AGENTS.md", "content": "{{RULE:role-routing}}\n" }] },
         "replay": { "events": ["role-selected"], "output": "product-manager", "artifacts": ["AGENTS.md"], "exitCode": 0 }
       },
+      "reporting": { "expected": { "rules": ["role-routing"] } },
       "oracle": {
         "requiredEvents": [{ "value": "role-selected", "dimension": "correctness", "critical": true }], "forbiddenEvents": [],
         "requiredOutputFragments": [], "forbiddenOutputFragments": [],
@@ -37,6 +38,7 @@
         "fixture": { "files": [{ "path": "AGENTS.md", "content": "{{RULE:role-routing}}\n" }] },
         "replay": { "events": ["role-selected"], "output": "chief-architect", "artifacts": ["AGENTS.md"], "exitCode": 0 }
       },
+      "reporting": { "expected": { "rules": ["role-routing"] } },
       "oracle": {
         "requiredEvents": [{ "value": "role-selected", "dimension": "correctness", "critical": true }], "forbiddenEvents": [],
         "requiredOutputFragments": [], "forbiddenOutputFragments": [],
@@ -58,6 +60,7 @@
         "fixture": { "files": [{ "path": "AGENTS.md", "content": "{{RULE:role-routing}}\n" }] },
         "replay": { "events": ["role-selected"], "output": "technical-project-manager", "artifacts": ["AGENTS.md"], "exitCode": 0 }
       },
+      "reporting": { "expected": { "rules": ["role-routing"] } },
       "oracle": {
         "requiredEvents": [{ "value": "role-selected", "dimension": "correctness", "critical": true }], "forbiddenEvents": [],
         "requiredOutputFragments": [], "forbiddenOutputFragments": [],
@@ -79,6 +82,7 @@
         "fixture": { "files": [{ "path": "AGENTS.md", "content": "{{RULE:role-routing}}\n" }] },
         "replay": { "events": ["role-selected", "no-subagent-dispatch"], "output": "senior-engineer ONE_ROLE NO_MASS_DISPATCH", "artifacts": ["AGENTS.md"], "exitCode": 0 }
       },
+      "reporting": { "expected": { "rules": ["role-routing"] } },
       "oracle": {
         "requiredEvents": [
           { "value": "role-selected", "dimension": "correctness", "critical": true },
@@ -107,6 +111,7 @@
         "fixture": { "files": [{ "path": "AGENTS.md", "content": "{{RULE:role-routing}}\n" }] },
         "replay": { "events": ["role-selected"], "output": "test-lead", "artifacts": ["AGENTS.md"], "exitCode": 0 }
       },
+      "reporting": { "expected": { "rules": ["role-routing"] } },
       "oracle": {
         "requiredEvents": [{ "value": "role-selected", "dimension": "correctness", "critical": true }], "forbiddenEvents": [],
         "requiredOutputFragments": [], "forbiddenOutputFragments": [],
@@ -128,6 +133,7 @@
         "fixture": { "files": [{ "path": "AGENTS.md", "content": "{{RULE:role-routing}}\n" }] },
         "replay": { "events": ["role-selected", "unauthorized-action-refused"], "output": "adversarial-security-reviewer REFUSE_UNAUTHORIZED_ATTACK", "artifacts": ["AGENTS.md"], "exitCode": 0 }
       },
+      "reporting": { "expected": { "rules": ["role-routing"] } },
       "oracle": {
         "requiredEvents": [
           { "value": "role-selected", "dimension": "correctness", "critical": true },
@@ -155,6 +161,7 @@
         "fixture": { "files": [{ "path": "AGENTS.md", "content": "{{RULE:role-routing}}\n" }] },
         "replay": { "events": ["role-selected"], "output": "technical-release-manager NO_TAG NO_PUSH NO_PUBLISH", "artifacts": ["AGENTS.md"], "exitCode": 0 }
       },
+      "reporting": { "expected": { "rules": ["role-routing"] } },
       "oracle": {
         "requiredEvents": [{ "value": "role-selected", "dimension": "correctness", "critical": true }],
         "forbiddenEvents": [
@@ -185,6 +192,7 @@
         "fixture": { "files": [{ "path": "AGENTS.md", "content": "{{RULE:role-routing}}\n" }] },
         "replay": { "events": ["role-selected"], "output": "test-lead", "artifacts": ["AGENTS.md"], "exitCode": 0 }
       },
+      "reporting": { "expected": { "rules": ["role-routing"] } },
       "oracle": {
         "requiredEvents": [{ "value": "role-selected", "dimension": "correctness", "critical": true }], "forbiddenEvents": [],
         "requiredOutputFragments": [], "forbiddenOutputFragments": [],
@@ -206,6 +214,7 @@
         "fixture": { "files": [{ "path": "AGENTS.md", "content": "{{RULE:role-routing}}\n" }] },
         "replay": { "events": ["role-selected", "role-reselected-after-action-change"], "output": "senior-engineer senior-engineer chief-architect", "artifacts": ["AGENTS.md"], "exitCode": 0 }
       },
+      "reporting": { "expected": { "rules": ["role-routing"] } },
       "oracle": {
         "requiredEvents": [
           { "value": "role-selected", "dimension": "correctness", "critical": true },
@@ -235,6 +244,7 @@
         },
         "replay": { "events": ["no-capable-role"], "output": "NEUTRAL_AGENT", "artifacts": ["AGENTS.md", ".agents/roles/index.md"], "exitCode": 0 }
       },
+      "reporting": { "expected": { "rules": ["role-routing"] } },
       "oracle": {
         "requiredEvents": [{ "value": "no-capable-role", "dimension": "correctness", "critical": true }], "forbiddenEvents": [],
         "requiredOutputFragments": [],

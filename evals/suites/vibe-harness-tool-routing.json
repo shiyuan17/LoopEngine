@@ -13,6 +13,7 @@
       "kind": "standard",
       "input": {
         "scenario": "Trace the real cross-file callers and downstream impact of a known symbol.",
+        "fixture": { "files": [], "allowedWritePaths": ["semantic-routing-evidence.json"] },
         "replay": {
           "events": [
             "codebase-memory-index-checked",
@@ -90,6 +91,7 @@
       "kind": "standard",
       "input": {
         "scenario": "Find a precise local AST pattern after mapping candidate source structure.",
+        "fixture": { "files": [], "allowedWritePaths": ["ast-routing-evidence.json"] },
         "replay": {
           "events": [
             "ast-grep-outline-used",
@@ -167,6 +169,7 @@
       "kind": "variation",
       "input": {
         "scenario": "Locate a configuration value and log marker that require plain-text matching.",
+        "fixture": { "files": [], "allowedWritePaths": ["text-routing-evidence.json"] },
         "replay": {
           "events": [
             "rg-used",
@@ -243,6 +246,7 @@
       "kind": "adversarial",
       "input": {
         "scenario": "Route a noisy build through RTK while preserving ast-grep, MCP runtime, interactive, and raw-evidence commands unchanged.",
+        "fixture": { "files": [], "allowedWritePaths": ["rtk-routing-decision.json"] },
         "replay": {
           "events": [
             "high-output-shell-routed",

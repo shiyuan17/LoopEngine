@@ -76,6 +76,21 @@ test('role-routing contract cases reject an executor that only repeats the expec
   assert.equal(contractReplay.passed, true);
 });
 
+test('online role and tool routing suites declare their fixture and reporting contracts', async () => {
+  const [roles, tools] = await Promise.all([
+    readJson(path.join(rootDir, 'evals/suites/vibe-harness-role-routing.json')),
+    readJson(path.join(rootDir, 'evals/suites/vibe-harness-tool-routing.json')),
+  ]);
+  assert.equal(roles.cases.length, 10);
+  assert.equal(roles.cases.every((item) => item.reporting?.expected?.rules?.includes('role-routing')), true);
+  assert.deepEqual(tools.cases.map((item) => item.input.fixture.allowedWritePaths), [
+    ['semantic-routing-evidence.json'],
+    ['ast-routing-evidence.json'],
+    ['text-routing-evidence.json'],
+    ['rtk-routing-decision.json'],
+  ]);
+});
+
 test('core suite contains exactly 38 generic cases in the required category split', async () => {
   const suite = await readJson(path.join(rootDir, 'evals/suites/vibe-harness-core.json'));
   assert.equal(suite.cases.length, 38);
