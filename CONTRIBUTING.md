@@ -26,7 +26,7 @@
 
 新增、移动或退役文档时同步 catalog 与 `docs/README.md` / `docs/archive/README.md`。
 
-修改 docs/rules/*.md 后运行 pnpm docs:audit 校验单一规则目录及其文档关系。
+修改 docs/rules/*.md 后校验单一规则目录及其文档关系；pnpm check 已包含文档审计，未运行 check 时再显式运行 pnpm docs:audit。
 
 ## 命令边界
 
@@ -67,7 +67,7 @@ rules、runtime hooks 或 config 内容变更会使 `evals/references/` 的 asse
 
 涉及结构、公共契约、安全与可靠性、关键依赖、迁移回滚或跨模块边界的 PR 必须在 docs/adr/ 中提供正式 ADR，或说明无需 ADR 的原因。同步更新 docs/adr/catalog.json 和 docs/memory/DECISIONS.md；接受或拒绝后的决策通过新 ADR 替代，不改写历史核心内容。
 
-文档、ADR、catalog 和 schema 变更必须报告 pnpm docs:audit 与 ADR 聚焦测试结果。
+文档、ADR、catalog 和 schema 变更按 AGENTS.md 验证矩阵执行；pnpm check 已包含文档与 ADR 校验时不重复运行，仅在未覆盖相关变更时补充聚焦检查。
 
 PR 说明目标、影响范围、实际验证、未验证项和必要的回滚路径。一个 commit 表达一个逻辑目的；不要用格式化或无关重构掩盖行为变化。
 

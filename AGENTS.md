@@ -55,17 +55,17 @@ TypeScript 配置、类型声明、JSDoc 类型契约，或完成主张涉及类
 项目：Vibe-Harness
 
 ## 启动
-1. 先读取 `docs/rules/governance-core.md`；只有出现 Skill 或专项领域信号时再读取 `docs/rules/AGENT_SKILL_ROUTING.md` 和一个命中的专项规则。
-2. 仅当任务需要恢复项目状态且当前授权允许读取 Memory body 时，读取 `docs/memory/` 的治理记忆（优先 `PROJECT_STATE.md`），按其与本地记忆库的优先级合并；本地记忆库恢复入口为 `.agents/memory/CURRENT.md`。 当专项 Skill 给出更窄证据边界时，仅检查相关路径是否存在及必要元数据，不读取正文。
+1. 先读取 `docs/rules/governance-core.md`；只有出现 Skill 或专项领域信号时再读取 `docs/rules/AGENT_SKILL_ROUTING.md` 和当前需要的专项规则。
+2. 仅当任务需要恢复项目状态且当前授权允许读取 Memory body 时，读取 `docs/memory/` 的治理记忆（优先 `PROJECT_STATE.md`），按其与本地记忆库的优先级合并；本地记忆库恢复入口为 `.agents/memory/CURRENT.md`。 当专项 Skill 限制 Memory 证据边界时，仅检查相关 Memory 路径是否存在及必要元数据、不读取其正文；不限制任务相关源码阅读。
 3. 编辑前运行 `git status --short`，保护用户未归属改动。
 4. 先按问题类型选工具：纯文本、配置和日志使用 rg 与直接文件阅读。
 5. 将任务归为快速、轻量或完整，并选择与主张匹配的验证。
 6. 使用“获取可信事实 → 判定并执行 → 聚焦验证 → 简洁交付”的单一路径；宿主按 description 直接选择领域 Skill。
 ## 硬边界
 
-- 只检查相关路径是否存在及必要元数据，不读取正文。
+- 仅对受限 Memory 路径检查存在性及必要元数据、不读取其正文；不限制读取任务相关源码、配置、规则和测试。
 
-- 只在授权范围内行动；红区、生产、权限、凭据、外部写入和不可逆操作先获人工确认。
+- 只在授权范围内行动；红区、生产、权限、凭据、外部写入和不可逆操作按 governance-core 的授权与批准规则执行；缺少覆盖授权时人工确认，已有覆盖授权不重复确认。
 - 不编造事实或证据；没有本轮有效验证不得声称完成。
 - 任务记录是可选的人读文档，不触发测试、Review、子 Agent 或完成门禁。
 
@@ -81,7 +81,7 @@ TypeScript 配置、类型声明、JSDoc 类型契约，或完成主张涉及类
 ## 已安装表面
 
 - 当前安装方式：自定义能力模块安装。 当前另安装 integration Skills：agentmemory；它们不计入 profile 的原生领域 Skill 数量。
-- 需求澄清姿态：`balanced`（action-leaning 偏向采用最小可逆默认值直接推进；balanced 按规则判断；conservative 对跨模块或公共契约改动也倾向先确认）。
+- 需求澄清姿态：`balanced`（action-leaning 偏向采用最小可逆默认值直接推进；balanced 按规则判断；conservative 对尚未解决的高影响分歧更谨慎）。
 
 - 规则位于 `docs/rules/`。
 - 工程专项规则位于 `docs/rules/`。
@@ -91,7 +91,7 @@ TypeScript 配置、类型声明、JSDoc 类型契约，或完成主张涉及类
 - agentmemory skills 位于 `.agents/skills/`，本地记忆库位于 `.agents/memory/`。
 - Codex hook 配置位于 `.codex/hooks.json`。
 
-宿主按 Skill description 原生选择一个当前阶段所需能力；不使用 Router 或流程 Skill 链。
+宿主按 Skill description 选择当前所需能力，按需补充互补 Skill；不使用 Router 或流程 Skill 链。
 
-规则优先级：平台系统与用户本轮指令优先；目标项目明确的本地规则优先于 Vibe-Harness 默认规则；目录级规则只作用于其子树。同一层级冲突时停止并请求确认。
+规则优先级：平台系统与用户本轮指令优先；目标项目明确的本地规则优先于 Vibe-Harness 默认规则；目录级规则只作用于其子树。先按优先级、适用范围和当前明确指令解析冲突；仅对仍影响结果且无法解决的实质冲突请求澄清。
 <!-- VIBE_HARNESS:END -->
