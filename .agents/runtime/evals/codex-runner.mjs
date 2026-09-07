@@ -1010,14 +1010,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const trustedHooks = process.env.VIBE_HARNESS_EVAL_TRUST_PROJECT_HOOKS === '1'
     ? ['--dangerously-bypass-hook-trust']
     : [];
-  const boundedCase = /^(?:EVAL-HOOK-NO-AUTO-COMMIT-001|EVAL-GIT-DELIVER-00[1-4]|EVAL-LINEAR-(?:014|015|01[6-9]|020|02[1-3]))$/u.test(request.case.id);
+  const judgeCase = request.case.id === 'EVAL-JUDGE';
+  const sandbox = judgeCase ? 'read-only' : 'workspace-write';
+  const boundedCase = judgeCase || /^(?:EVAL-HOOK-NO-AUTO-COMMIT-001|EVAL-GIT-DELIVER-00[1-4]|EVAL-LINEAR-(?:014|015|01[6-9]|020|02[1-3]))$/u.test(request.case.id);
   const sharedArgs = [
     '--json', '--skip-git-repo-check', '--ignore-user-config', ...trustedHooks,
     '--disable', 'apps', '--disable', 'plugins', '--disable', 'remote_plugin',
     '--disable', 'browser_use', '--disable', 'computer_use', '--disable', 'image_generation',
     '--disable', 'in_app_browser', '--disable', 'goals', '--disable', 'workspace_dependencies',
     '--model', model, '-c', `model_reasoning_effort=${JSON.stringify(reasoningEffort)}`,
-    '-c', 'sandbox_mode="workspace-write"',
+    '-c', `sandbox_mode=${JSON.stringify(sandbox)}`,
     ...(backend !== 'native' || !usesWindowsExecutable(command.args[0] ?? command.program)
       ? (boundedCase ? ['--disable', 'multi_agent'] : ['--enable', 'multi_agent', '--enable', 'remote_compaction_v2'])
       : []),
@@ -1028,7 +1030,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     : request.workspace;
   const invocationArgs = request.sessionId
     ? [...command.args, 'exec', 'resume', ...sharedArgs, request.sessionId, request.case.input.scenario]
-    : [...command.args, 'exec', ...sharedArgs, '--sandbox', 'workspace-write',
+    : [...command.args, 'exec', ...sharedArgs, '--sandbox', sandbox,
       ...(request.schemaVersion === 1 ? ['--ephemeral'] : []),
       '-C', executionWorkspace, request.case.input.scenario];
   const result = await execute(command.program, invocationArgs, request.workspace, isolatedEnvironment);
