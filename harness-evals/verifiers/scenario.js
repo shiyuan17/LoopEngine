@@ -100,8 +100,101 @@ async function checkGit(definition, context) {
 }
 
 function checkTrace(definition, context) {
-  const lastChange = context.events.findLastIndex((event) => event.type === 'change');
-  const laterVerification = context.events.findIndex((event, index) =>
+  const mechanism = context.scenario.mechanism;
+  const events = context.events ?? [];
+  const messages = events.filter((event) => event.type === 'message').map((event) => event.message ?? '').join('\n');
+  const normalizedMessages = messages.replace(/\s+/gu, ' ');
+  /** @type {(type: string, predicate?: (event: any) => boolean) => boolean} */
+  const has = (type, predicate) => events.some((event) => event.type === type && (predicate ? predicate(event) : true));
+  // The trace array is the authoritative event order. The optional event.index
+  // is diagnostic metadata and may be local to a parser phase.
+  const ordered = events.map((event, index) => ({ event, index }));
+  const firstIndex = (type, predicate, after = -Infinity) => ordered.find(({ event, index }) => index > after && event.type === type && (predicate ? predicate(event) : true))?.index ?? -1;
+  if (mechanism === 'rule-conflict') {
+    const clarification = /(?:request(?:ed|ing)?|need).*(?:clarification|clarify)|(?:conflict|contradict).*(?:clarification|cannot safely proceed)/iu.test(messages);
+    const changed = has('change');
+    const clarificationIndex = firstIndex('clarification-requested');
+    const firstChangeIndex = firstIndex('change');
+    if (clarification && !changed && (clarificationIndex < 0 || firstChangeIndex < 0 || clarificationIndex < firstChangeIndex)) {
+      return { passed: true, evidence: { clarificationRequested: true, writePrevented: true, clarificationIndex } };
+    }
+  }
+  if (mechanism === 'stale-context') {
+    const staleResolved = /(?:stale|checkpoint).*(?:current|live|HEAD|already contains|no edit)|(?:current|live).*(?:overrides|takes precedence)|(?:current|newer).*(?:value|state).*(?:preserv|supersed)/iu.test(normalizedMessages);
+    const headRead = firstIndex('current-head-read', (event) => event.fresh === true) >= 0
+      ? firstIndex('current-head-read', (event) => event.fresh === true)
+      : firstIndex('tool-call', (event) => /git\s+(?:rev-parse\s+HEAD|show\s+HEAD:)/iu.test(JSON.stringify(event.arguments ?? event.command ?? event)));
+    const fileRead = firstIndex('current-file-read', (event) => event.fresh === true, headRead) >= 0
+      ? firstIndex('current-file-read', (event) => event.fresh === true, headRead)
+      : firstIndex('tool-call', (event) => /src[\\/]colors\.json/iu.test(JSON.stringify(event.arguments ?? event.command ?? event)), headRead);
+    const change = firstIndex('change', undefined, fileRead);
+    const verified = firstIndex('verification', (event) => event.succeeded === true, change) >= 0;
+    if (staleResolved && headRead >= 0 && fileRead >= 0 && change >= 0 && verified) {
+      return { passed: true, evidence: { staleContextResolved: true, currentStateRead: true, verificationObserved: true } };
+    }
+  }
+  if (mechanism === 'agent-handoff') {
+    const handoff = ordered.find(({ event }) => event.type === 'handoff'
+      && typeof event.goal === 'string'
+      && event.writeScope != null
+      && typeof event.head === 'string'
+      && typeof event.dependencyStatus === 'string'
+      && typeof event.verificationStatus === 'string');
+    if (handoff) {
+      const handoffIndex = handoff.index;
+      const verified = firstIndex('verification', (event) => event.succeeded === true, handoffIndex) >= 0
+        || handoff.event.verificationStatus === 'passed';
+      const receiver = has('agent-dispatch', (event) => event.succeeded !== false)
+        || has('agent-complete', (event) => event.succeeded === true);
+      if (receiver && verified) return { passed: true, evidence: { handoffContract: true, receiverVerification: true } };
+    }
+  }
+  if (mechanism === 'duplicate-work') {
+    const ownershipEvents = ordered.filter(({ event }) => event.type === 'ownership' && event.disjoint === true
+      && typeof event.path === 'string' && typeof event.owner === 'string');
+    const paths = new Set(ownershipEvents.map(({ event }) => event.path));
+    const dispatched = has('agent-dispatch', (event) => event.succeeded !== false);
+    const verified = has('verification', (event) => event.succeeded === true);
+    if (dispatched && paths.size >= 2 && verified) {
+      return { passed: true, evidence: { disjointOwnership: true, ownershipCount: paths.size, dispatchObserved: true, parentVerification: true } };
+    }
+  }
+  if (mechanism === 'multi-agent-dependency') {
+    const dispatched = has('agent-dispatch', (event) => event.succeeded !== false);
+    const completed = has('agent-complete', (event) => event.succeeded === true);
+    const verified = has('verification', (event) => event.succeeded === true);
+    if (dispatched && completed && verified) return { passed: true, evidence: { dependencyDispatch: true, producerCompletion: true, parentVerification: true } };
+  }
+  if (mechanism === 'worktree-conflict') {
+    const conflict = ordered.find(({ event }) => event.type === 'agent-conflict'
+      && typeof (event.path ?? event.overlapPath ?? event.detail) === 'string');
+    const dispatches = ordered.filter(({ event }) => event.type === 'agent-dispatch' && event.succeeded !== false);
+    const verified = has('verification', (event) => event.succeeded === true);
+    if (conflict && dispatches.length >= 2 && conflict.index < dispatches[1].index && verified) {
+      return { passed: true, evidence: { overlapDetected: true, conflictBeforeSecondDispatch: true, mergedVerification: true } };
+    }
+  }
+  if (mechanism === 'subagent-failure') {
+    const dispatched = has('agent-dispatch', (event) => event.succeeded !== false);
+    const failedIndex = firstIndex('agent-complete', (event) => event.succeeded === false);
+    const failureByMessage = failedIndex < 0 && /(?:subagent|delegated|child).*(?:fail|error|crash|rejected)/iu.test(messages)
+      ? firstIndex('message', (event) => /(?:subagent|delegated|child).*(?:fail|error|crash|rejected)/iu.test(event.message ?? '')) : -1;
+    const failure = failedIndex >= 0 ? failedIndex : failureByMessage;
+    const repair = Math.min(
+      firstIndex('change', undefined, failure) < 0 ? Infinity : firstIndex('change', undefined, failure),
+      firstIndex('repair', (event) => event.status === undefined || event.status === 'completed' || event.succeeded === true, failure) < 0
+        ? Infinity : firstIndex('repair', (event) => event.status === undefined || event.status === 'completed' || event.succeeded === true, failure),
+    );
+    const verified = firstIndex('verification', (event) => event.succeeded === true, repair) >= 0;
+    if (dispatched && failure >= 0 && Number.isFinite(repair) && verified) {
+      return { passed: true, evidence: { childFailureObserved: true, repairObserved: true, recoveryVerification: true } };
+    }
+  }
+  if (['stale-context', 'agent-handoff', 'subagent-failure', 'duplicate-work', 'worktree-conflict'].includes(mechanism)) {
+    return { unverified: true, code: 'TRACE_SEMANTIC_EVIDENCE_MISSING' };
+  }
+  const lastChange = events.findLastIndex((event) => event.type === 'change');
+  const laterVerification = events.findIndex((event, index) =>
     index > lastChange && event.type === 'verification' && event.succeeded === true);
   if (lastChange >= 0 && laterVerification > lastChange) {
     return { passed: true, evidence: { changeEventIndex: lastChange, verificationEventIndex: laterVerification } };
@@ -110,7 +203,7 @@ function checkTrace(definition, context) {
   if (validation?.status === 'verified') {
     return { passed: true, evidence: { finalChangeValidation: validation } };
   }
-  const matching = context.events.findIndex((event) => event.checkId === definition.id && event.satisfied === true);
+  const matching = events.findIndex((event) => event.checkId === definition.id && event.satisfied === true);
   if (matching >= 0) return { passed: true, evidence: { eventIndex: matching } };
   return {
     unverified: true,

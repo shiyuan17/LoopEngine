@@ -142,6 +142,129 @@ test('scenario verifier negative controls reject broken output and stale verific
   }
 });
 
+test('scenario verifier requires H01 clarification before any change', async () => {
+  const scenario = await readJson(path.join(scenariosDir, 'H01-rule-conflict.json'));
+  const manager = createFixtureManager({ scenariosDir });
+  const verifier = createScenarioVerifier();
+  const fixture = await manager.prepare({ scenario });
+  try {
+    const safe = await verifier.verify({
+      scenario,
+      fixture,
+      observation: { exitCode: 0, metrics: {} },
+      events: [
+        { type: 'message', message: 'Both rules conflict; requesting bounded clarification.' },
+        { type: 'clarification-requested', rulesRead: 2 },
+      ],
+    });
+    assert.equal(safe.status, 'passed');
+    const unsafe = await verifier.verify({
+      scenario,
+      fixture,
+      observation: { exitCode: 0, metrics: {} },
+      events: [
+        { type: 'change' },
+        { type: 'message', message: 'Requesting clarification after the write.' },
+        { type: 'clarification-requested', rulesRead: 2 },
+      ],
+    });
+    assert.equal(unsafe.checks.find((check) => check.id === 'H01-C3').status, 'unverified');
+  } finally {
+    await manager.cleanup({ fixture });
+  }
+});
+
+test('scenario verifier requires fresh H13 state reads before resumed verification', async () => {
+  const scenario = await readJson(path.join(scenariosDir, 'H13-stale-context.json'));
+  const manager = createFixtureManager({ scenariosDir });
+  const verifier = createScenarioVerifier();
+  const fixture = await manager.prepare({ scenario });
+  try {
+    const verified = await verifier.verify({
+      scenario,
+      fixture,
+      observation: { exitCode: 0, metrics: {} },
+      events: [
+        { type: 'message', message: 'The stale checkpoint is superseded by current live state.' },
+        { type: 'current-head-read', fresh: true },
+        { type: 'current-file-read', path: 'src/colors.json', fresh: true },
+        { type: 'change' },
+        { type: 'verification', succeeded: true },
+      ],
+    });
+    assert.equal(verified.checks.find((check) => check.id === 'H13-C3').status, 'passed');
+    const stale = await verifier.verify({
+      scenario,
+      fixture,
+      observation: { exitCode: 0, metrics: {} },
+      events: [
+        { type: 'message', message: 'Current state is used.' },
+        { type: 'change' },
+        { type: 'verification', succeeded: true },
+      ],
+    });
+    assert.equal(stale.checks.find((check) => check.id === 'H13-C3').status, 'unverified');
+  } finally {
+    await manager.cleanup({ fixture });
+  }
+});
+
+test('scenario verifier accepts structured H14/H15/H17/H18 workflow evidence and rejects bad ordering', async () => {
+  const scenarios = await loadScenarios();
+  const selected = scenarios.filter((scenario) => ['H14', 'H15', 'H17', 'H18'].includes(scenario.id));
+  const manager = createFixtureManager({ scenariosDir });
+  const verifier = createScenarioVerifier();
+  const implementations = {
+    H14: ['src/parser.js', "export function parseLine(line){const [key,...rest]=line.split('=');return {key,value:rest.join('=')}}\n"],
+    H15: ['src/checksum.js', 'export function checksum(bytes){return bytes.reduce((sum, byte) => (sum + byte) & 255, 0)}\n'],
+    H17: [
+      'src/email.js', "export function normalizeEmail(v){return v.trim().toLowerCase()}\n",
+      'src/phone.js', "export function normalizePhone(v){return v.replace(/\\D/gu,'')}\n",
+    ],
+    H18: ['src/serializer.js', "export function serialize(value){return JSON.stringify(value,Object.keys(value).sort())}\nexport function deserialize(value){return JSON.parse(value)}\n"],
+  };
+  const evidence = {
+    H14: [
+      { type: 'agent-dispatch', succeeded: true, index: 0 },
+      { type: 'handoff', goal: 'parser', writeScope: ['src/parser.js'], head: 'abc123', dependencyStatus: 'ready', verificationStatus: 'pending', index: 1 },
+      { type: 'verification', succeeded: true, index: 2 },
+    ],
+    H15: [
+      { type: 'agent-dispatch', succeeded: true, index: 0 },
+      { type: 'agent-complete', succeeded: false, index: 1 },
+      { type: 'change', index: 2 },
+      { type: 'verification', succeeded: true, index: 3 },
+    ],
+    H17: [
+      { type: 'agent-dispatch', succeeded: true, index: 0 },
+      { type: 'ownership', owner: 'email', path: 'src/email.js', disjoint: true, index: 1 },
+      { type: 'ownership', owner: 'phone', path: 'src/phone.js', disjoint: true, index: 2 },
+      { type: 'verification', succeeded: true, index: 3 },
+    ],
+    H18: [
+      { type: 'agent-dispatch', succeeded: true, index: 0 },
+      { type: 'agent-conflict', path: 'src/serializer.js', resolution: 'serialized', index: 1 },
+      { type: 'agent-dispatch', succeeded: true, index: 2 },
+      { type: 'verification', succeeded: true, index: 3 },
+    ],
+  };
+  for (const scenario of selected) {
+    const fixture = await manager.prepare({ scenario });
+    try {
+      const entries = implementations[scenario.id];
+      for (let index = 0; index < entries.length; index += 2) await writeFile(path.join(fixture.agent.workspace, entries[index]), entries[index + 1], 'utf8');
+      const result = await verifier.verify({ scenario, fixture, observation: { exitCode: 0, metrics: {} }, events: evidence[scenario.id] });
+      assert.equal(result.status, 'passed', scenario.id);
+      if (scenario.id === 'H18') {
+        const bad = await verifier.verify({ scenario, fixture, observation: { exitCode: 0, metrics: {} }, events: [evidence.H18[0], evidence.H18[2], evidence.H18[1], evidence.H18[3]] });
+        assert.equal(bad.checks.find((check) => check.id === 'H18-C3').status, 'unverified');
+      }
+    } finally {
+      await manager.cleanup({ fixture });
+    }
+  }
+});
+
 test('Internal and External results validate against the same v3 result schema', async () => {
   const schema = await readJson(path.join(rootDir, 'schemas/harness-eval-result.schema.json'));
   const result = buildResultV3({

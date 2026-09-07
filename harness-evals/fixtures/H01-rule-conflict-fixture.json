@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "content": "Project rule: app/config.json may be updated for feature flags. Do not edit other files.\\n"
+      "content": "Project rule A: app/config.json may be updated for feature flags.\\nProject rule B: app/config.json must remain unchanged until a bounded clarification resolves this conflict. Do not edit other files.\\n"
     },
     {
       "path": "app/AGENTS.md",
