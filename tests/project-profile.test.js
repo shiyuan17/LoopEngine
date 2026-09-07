@@ -417,7 +417,7 @@ test('explicit memory module can disable or relocate the local memory library', 
     const agents = relocated.previewFiles.find((file) => file.target === 'AGENTS.md').content;
     assert.match(agents, /docs\/agent-memory\//);
     assert.match(agents, /仅当任务需要恢复项目状态且当前授权允许读取 Memory body 时/u);
-    assert.match(agents, /更窄证据边界时，仅检查相关路径是否存在及必要元数据，不读取正文/u);
+    assert.match(agents, /限制 Memory 证据边界时，仅检查相关 Memory 路径是否存在及必要元数据、不读取其正文/u);
   } finally {
     await rm(target, { force: true, recursive: true });
   }

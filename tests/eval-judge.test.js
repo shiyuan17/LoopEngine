@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import {
   DEFAULT_JUDGE_THRESHOLD,
@@ -10,6 +13,63 @@ import {
 } from '../scripts/lib/eval-judge.js';
 
 const originalFetch = globalThis.fetch;
+
+test('Codex judge reuses isolated auth, responses provider, and per-call model without an API key', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'judge-codex-'));
+  const authFile = path.join(root, 'auth.json');
+  const cli = path.join(root, 'codex.mjs');
+  await writeFile(authFile, '{"testCredential":"fixture-only"}');
+  await writeFile(cli, `
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+const args = process.argv.slice(2);
+if (args.includes('--version')) { console.log('codex-cli fixture'); process.exit(0); }
+assert.equal(args[args.indexOf('--sandbox') + 1], 'read-only');
+assert.ok(args.includes('sandbox_mode="read-only"'));
+assert.ok(args.includes('--ignore-user-config'));
+assert.ok(args.includes('model_providers.fixture.wire_api="responses"'));
+assert.ok(args.includes('model_providers.fixture.base_url="https://fixture.invalid/v1"'));
+assert.equal(process.env.OPENAI_API_KEY, undefined);
+assert.equal(process.env.UNRELATED_SECRET, undefined);
+assert.deepEqual(JSON.parse(readFileSync(path.join(process.env.CODEX_HOME, 'auth.json'), 'utf8')), { testCredential: 'fixture-only' });
+const model = args[args.indexOf('--model') + 1];
+if (model === 'tools') console.log(JSON.stringify({type:'item.completed',item:{type:'command_execution',command:'echo tool',exit_code:0,aggregated_output:'tool'}}));
+const text = model === 'malformed' ? 'no score' : JSON.stringify({score:0.9,rationale:model});
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text}}));
+if (model === 'failed') process.exitCode = 1;
+`);
+  const environment = {
+    ...process.env, VIBE_HARNESS_EVAL_RUNTIME_SOURCE: 'codex', CODEX_MODEL: 'gpt-6-astra',
+    VIBE_HARNESS_CODEX_COMMAND: cli, VIBE_HARNESS_EVAL_CODEX_BACKEND: 'native',
+    VIBE_HARNESS_EVAL_AUTH_FILE: authFile, VIBE_HARNESS_EVAL_PROVIDER_NAME: 'fixture',
+    VIBE_HARNESS_EVAL_PROVIDER_REQUIRES_AUTH: '1', VIBE_HARNESS_EVAL_PROVIDER_WIRE_API: 'responses',
+    OPENAI_BASE_URL: 'https://fixture.invalid/v1', OPENAI_API_KEY: 'unrelated-key', UNRELATED_SECRET: 'must-not-forward',
+  };
+  try {
+    const judge = createJudge({ environment });
+    const input = { scenario: 's', observation: { output: 'o' }, rubric: 'r' };
+    const [inherited, override] = await Promise.all([
+      judge.judgeRubric(input), judge.judgeRubric({ ...input, judgeModel: 'override' }),
+    ]);
+    assert.deepEqual(inherited, { score: 0.9, rationale: 'gpt-6-astra', judgeModel: 'gpt-6-astra' });
+    assert.equal(override.rationale, 'override');
+    assert.equal(environment.CODEX_MODEL, 'gpt-6-astra');
+    assert.equal(environment.OPENAI_API_KEY, 'unrelated-key');
+    for (const judgeModel of ['malformed', 'failed', 'tools']) {
+      await assert.rejects(judge.judgeRubric({ ...input, judgeModel }), { code: 'EVAL_JUDGE_UNAVAILABLE' });
+    }
+    assert.equal(await readFile(authFile, 'utf8'), '{"testCredential":"fixture-only"}');
+    const unavailable = createJudge({ environment: { ...environment, VIBE_HARNESS_EVAL_AUTH_FILE: path.join(root, 'missing.json') } });
+    await assert.rejects(unavailable.judgeRubric(input), (error) => {
+      assert.equal(error.code, 'EVAL_JUDGE_UNAVAILABLE');
+      assert.doesNotMatch(error.message, /unrelated-key|fixture-only|missing.json/);
+      return true;
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 function jsonResponse(status, body) {
   return {

@@ -22,7 +22,7 @@ test('fact sufficiency is risk-proportionate and routes remaining ambiguity', as
   assert.match(kernel, /不要求.*机械.*双来源/u);
   assert.match(kernel, /来源冲突.*不得任意择一/u);
   assert.match(kernel, /可发现事实.*继续只读探索/u);
-  assert.match(kernel, /阻塞产品决定.*最多三个/u);
+  assert.match(kernel, /阻塞产品决定.*每轮最多三个/u);
   assert.match(kernel, /安全审批.*明确授权/u);
   assert.match(kernel, /可逆实现选择.*最小可逆默认值/u);
 });
@@ -54,9 +54,9 @@ test('lightweight Task DAG is optional and defines deterministic collaboration s
   assert.match(collaboration, /all_done.*不得把失败图改判为成功/u);
   assert.match(collaboration, /Windows 路径比较忽略大小写/u);
   assert.match(collaboration, /相同 resourceLocks.*唯一节点负责写入/u);
-  assert.match(collaboration, /写节点失败后不再派发新的写节点/u);
+  assert.match(collaboration, /已隔离的独立写节点仍可派发/u);
   assert.match(collaboration, /最多尝试三次.*Retry-After/u);
-  assert.match(collaboration, /权限、安全门禁、契约歧义、确定性测试失败和非幂等外部写入不得自动重试/u);
+  assert.match(collaboration, /权限和安全拒绝不得重试绕过.*确定性测试失败先修复再验证/u);
   assert.match(collaboration, /最后一次实质写入后运行集成验证/u);
 });
 
@@ -91,7 +91,7 @@ test('capability catalog and online canary register lightweight Task DAG coverag
   assert.ok(capability);
   assert.deepEqual(capability.profiles, ['minimal', 'core', 'full', 'docs-only']);
   assert.deepEqual(capability.evaluation.suites, ['evals/suites/vibe-harness-online-canary.json']);
-  assert.equal(suite.version, '2.9.0');
+  assert.equal(suite.version, '2.10.0');
   const cases = suite.cases.filter((item) => item.capability === 'lightweight-task-dag');
   assert.deepEqual(cases.map((item) => item.id), [
     'EVAL-DAG-001',
@@ -105,14 +105,16 @@ test('capability catalog and online canary register lightweight Task DAG coverag
   assert.equal(cases.every((item) => item.risk === 'critical' && item.repetitions === 3), true);
 });
 
-test('plan split judgment gates execution without becoming a workflow gate', async () => {
+test('implementation methods stay adaptive within explicit authorization', async () => {
   const kernel = await readFile(path.join(rootDir, 'docs/rules/governance-core.md'), 'utf8');
-  assert.match(kernel, /命中公共契约\/迁移兼容、混合重构与行为修改/u);
-  assert.match(kernel, /按模块边界、依赖关系、独立验收和验证层级判断/u);
-  assert.doesNotMatch(kernel, /0–1 项直接执行计划；2–3 项拆分为实施任务/u);
-  assert.match(kernel, /Plan 只描述实施方式，不构成写入、提交、推送或外部操作授权/u);
-  assert.match(kernel, /执行判定：直接实施/u);
-  assert.match(kernel, /执行判定：拆分实施/u);
+  assert.match(kernel, /按实际依赖、写入隔离和独立并行收益/u);
+  assert.match(kernel, /不按信号数量或公共契约变化强制拆分/u);
+  assert.match(kernel, /宿主 Plan 模式保持只读/u);
+  assert.match(kernel, /授权持续有效，不重复确认/u);
+  assert.match(kernel, /同一目标、对象、操作和风险范围/u);
+  assert.match(kernel, /不得以准备为名执行待批准动作/u);
+  assert.match(kernel, /必要验证受阻时报告具体缺口/u);
+  assert.match(kernel, /一个内部步骤完成不等于整个请求完成/u);
 });
 
 test('task templates expose the optional implementation task split table', async () => {
@@ -140,7 +142,7 @@ test('capability catalog and online canary register plan task split coverage', a
   const capability = capabilities.items.find((item) => item.id === 'plan-task-split');
   assert.ok(capability);
   assert.deepEqual(capability.profiles, ['minimal', 'core', 'full', 'docs-only']);
-  assert.deepEqual(capability.evaluation.suites, ['evals/suites/vibe-harness-online-canary.json']);
+  assert.deepEqual(capability.evaluation.suites, ['evals/suites/vibe-harness-online-canary.json', 'evals/suites/vibe-harness-online-autonomy.json']);
   const cases = suite.cases.filter((item) => item.capability === 'plan-task-split');
   assert.deepEqual(cases.map((item) => item.id), [
     'EVAL-SPLIT-001',

@@ -202,17 +202,16 @@ test('git-deliver canaries pin explicit authorization and safe push boundaries',
   );
 });
 
-test('EVAL-SPLIT cases share one verbatim AGENTS.md fixture text', async () => {
+test('EVAL-SPLIT cases use canonical rules without answer fragments', async () => {
   const suite = await readJson(path.join(rootDir, 'evals/suites/vibe-harness-online-canary.json'));
   const cases = suite.cases.filter((item) => item.id.startsWith('EVAL-SPLIT-'));
   assert.deepEqual(cases.map((item) => item.id), ['EVAL-SPLIT-001', 'EVAL-SPLIT-002', 'EVAL-SPLIT-003']);
-  const fixtureTexts = cases.map(
-    (item) => item.input.fixture.files.find((file) => file.path === 'AGENTS.md').content,
-  );
-  assert.equal(new Set(fixtureTexts).size, 1);
-  assert.match(fixtureTexts[0], /hard trigger forces splitting/u);
-  assert.match(fixtureTexts[0], /4 or more: must split and declare task dependencies/u);
-  assert.match(fixtureTexts[0], /execution disposition/u);
+  for (const item of cases) {
+    assert.match(item.input.fixture.files.find((file) => file.path === 'AGENTS.md').content, /\{\{RULE:governance-core\}\}/u);
+    assert.deepEqual(item.oracle.requiredOutputFragments, []);
+    assert.ok(item.oracle.llmRubrics.every((rubric) => rubric.critical));
+    assert.doesNotMatch(item.input.scenario, /Return |EXECUTION_DISPOSITION|SPLIT_HARD_TRIGGER/u);
+  }
 });
 
 test('EVAL-FACT cases cover risk-proportionate evidence sufficiency', async () => {
@@ -220,7 +219,7 @@ test('EVAL-FACT cases cover risk-proportionate evidence sufficiency', async () =
     readJson(path.join(rootDir, 'evals/suites/vibe-harness-online-canary.json')),
     readJson(path.join(rootDir, 'manifests/capabilities.json')),
   ]);
-  assert.equal(suite.version, '2.9.0');
+  assert.equal(suite.version, '2.10.0');
   const capability = capabilities.items.find((item) => item.id === 'execution-kernel');
   assert.deepEqual(capability.evaluation, {
     required: true,

@@ -1,106 +1,56 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { runEvaluationCase } from '../scripts/lib/eval-runner.js';
 import { readJson } from '../scripts/lib/manifest.js';
 
 const rootDir = path.resolve(import.meta.dirname, '..');
 
-// Fixture-internal concept integrity: each hard trigger and soft signal the
-// fixture paraphrases must keep its English anchor (eval asset lock, not a
-// rule wording lock).
-const FIXTURE_CONCEPT_ANCHORS = [
-  /public contract, schema, or data model change with migration or compatibility impact/u,
-  /mixing refactor and behavior change/u,
-  /exceed one context/u,
-  /multiple independent modules/u,
-  /ordering dependencies/u,
-  /parallelizable work units/u,
-  /independently acceptable stages/u,
-  /multiple test layers/u,
-  /execution disposition/u,
-  /does not authorize workspace writes, commits, pushes, or external effects/u,
-];
-
-const DISPOSITION_FRAGMENTS = {
-  'EVAL-SPLIT-001': 'EXECUTION_DISPOSITION: DIRECT_IMPLEMENTATION',
-  'EVAL-SPLIT-002': 'EXECUTION_DISPOSITION: SPLIT_IMPLEMENTATION',
-  'EVAL-SPLIT-003': 'EXECUTION_DISPOSITION: SPLIT_WITH_DEPENDENCIES',
-};
-
-// Decision table mirrored from the rule thresholds: any hard trigger forces a
-// split regardless of soft signals; otherwise 0-1 soft signals execute the
-// plan directly and 4 or more must split with declared dependencies.
-function expectedVerdict({ hardTrigger, softSignals }) {
-  if (hardTrigger) return 'SPLIT_HARD_TRIGGER';
-  if (softSignals <= 1) return 'DIRECT_EXECUTE';
-  if (softSignals >= 4) return 'SPLIT_WITH_DEPENDENCIES';
-  return 'SPLIT';
-}
-
-// Per-case parity spec: the scenario must actually declare the signals that
-// justify its expected verdict under the decision table above.
-const SPLIT_CASE_SPECS = {
-  'EVAL-SPLIT-001': {
-    hardTrigger: false,
-    softSignals: 0,
-    scenarioKeywords: [
-      'no contract or schema change',
-      'no migration',
-      'no refactor mixed with behavior change',
-      'one module only',
-      'no parallelizable units',
-      'a single acceptance stage',
-      'one layer of focused tests',
-    ],
-  },
-  'EVAL-SPLIT-002': {
-    hardTrigger: true,
-    softSignals: 0,
-    scenarioKeywords: ['public API schema', 'data migration'],
-  },
-  'EVAL-SPLIT-003': {
-    hardTrigger: false,
-    softSignals: 5,
-    scenarioKeywords: [
-      'three independent modules',
-      'ordering dependencies',
-      'worked in parallel',
-      'acceptable stages',
-      'unit plus integration verification',
-    ],
-  },
-};
-
-test('EVAL-SPLIT fixture keeps its independent task-split contract', async () => {
+test('split scenarios distinguish small compatible changes from actual concurrent ownership', async () => {
   const suite = await readJson(path.join(rootDir, 'evals/suites/vibe-harness-online-canary.json'));
   const cases = suite.cases.filter((item) => item.id.startsWith('EVAL-SPLIT-'));
   assert.equal(cases.length, 3);
-  const fixtureText = cases[0].input.fixture.files.find((file) => file.path === 'AGENTS.md').content;
-  for (const anchor of FIXTURE_CONCEPT_ANCHORS) {
-    assert.match(fixtureText, anchor, 'fixture concept anchor drifted: ' + anchor);
+  assert.match(cases[1].input.scenario, /optional field.*compatible.*no data migration/u);
+  assert.match(cases[2].input.scenario, /parallel implementation by independent writers/u);
+  for (const item of cases) {
+    assert.equal(item.repetitions, 3);
+    assert.deepEqual(item.oracle.requiredOutputFragments, []);
+    assert.equal(item.oracle.exactOutput, undefined);
+    assert.doesNotMatch(item.input.scenario, /Return |EXECUTION_DISPOSITION|SPLIT_HARD_TRIGGER/u);
+    assert.ok(item.oracle.forbiddenEvents.some((event) => event.value === 'workspace-write-invoked' && event.critical));
+    assert.ok(item.oracle.llmRubrics.every((rubric) => rubric.critical));
   }
-  assert.match(fixtureText, /0-1 signals: execute the plan directly/u);
-  assert.match(fixtureText, /2-3 signals: split into implementation tasks/u);
-  assert.match(fixtureText, /4 or more: must split and declare task dependencies/u);
 });
 
-test('EVAL-SPLIT expected verdicts match the rule decision table for the declared signals', async () => {
+test('online split request expands real governance without leaking scoring answers into the prompt', async () => {
   const suite = await readJson(path.join(rootDir, 'evals/suites/vibe-harness-online-canary.json'));
-  const cases = suite.cases.filter((item) => item.id.startsWith('EVAL-SPLIT-'));
-  for (const item of cases) {
-    const spec = SPLIT_CASE_SPECS[item.id];
-    assert.ok(spec, 'EVAL-SPLIT case without a parity spec: ' + item.id);
-    for (const keyword of spec.scenarioKeywords) {
-      assert.match(item.input.scenario, new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'),
-        item.id + ' scenario no longer declares: ' + keyword);
-    }
-    const expected = expectedVerdict(spec);
-    const required = item.oracle?.requiredOutputFragments ?? [];
-    const requiredValues = required.map((fragment) => fragment.value);
-    assert.ok(requiredValues.includes(expected),
-      item.id + ' expects ' + expected + ' from the decision table but requires: ' + JSON.stringify(requiredValues));
-    assert.ok(requiredValues.includes(DISPOSITION_FRAGMENTS[item.id]),
-      item.id + ' must expose its implementation disposition');
+  const definition = suite.cases.find((item) => item.id === 'EVAL-SPLIT-002');
+  const temp = await mkdtemp(path.join(tmpdir(), 'vibe-split-request-'));
+  const capture = path.join(temp, 'capture.json');
+  const runner = path.join(temp, 'runner.mjs');
+  try {
+    await writeFile(runner, `import {readFile,writeFile} from 'node:fs/promises';
+import path from 'node:path';
+let input='';for await(const chunk of process.stdin) input+=chunk;
+const r=JSON.parse(input);
+await writeFile(${JSON.stringify(capture)},JSON.stringify({prompt:r.case.input.scenario,rules:await readFile(path.join(r.workspace,'AGENTS.md'),'utf8')}));
+console.log(JSON.stringify({schemaVersion:1,caseId:r.case.id,configHash:r.configHash,runner:'contract-probe',model:'stub',agentVersion:'1',output:'Bounded implementation with compatibility verification.',events:[],artifacts:[],diagnostics:[],exitCode:0}));
+`);
+    const result = await runEvaluationCase({
+      command: `${JSON.stringify(process.execPath)} ${JSON.stringify(runner)}`,
+      definition,
+      sourceRoot: rootDir,
+      judge: { judgeRubric: async () => ({ score: 1, rationale: 'Contract plumbing only.', judgeModel: 'stub' }) },
+    });
+    assert.equal(result.status, 'ready');
+    const captured = JSON.parse(await readFile(capture, 'utf8'));
+    assert.equal(captured.prompt, definition.input.scenario);
+    assert.equal(captured.rules, await readFile(path.join(rootDir, 'docs/rules/governance-core.md'), 'utf8'));
+    assert.doesNotMatch(captured.prompt, /Evaluator contract|DIRECT_IMPLEMENTATION|SPLIT_IMPLEMENTATION/u);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
   }
 });

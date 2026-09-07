@@ -45,13 +45,13 @@ test('read-only evaluation keeps Memory body access behind recovery and authoriz
 
   assert.equal(bodyReadAllowed, false);
   assert.match(agents, /仅当任务需要恢复项目状态且当前授权允许/u);
-  assert.match(agents, /只检查相关路径是否存在及必要元数据，不读取正文/u);
+  assert.match(agents, /仅对受限 Memory 路径检查存在性及必要元数据、不读取其正文/u);
   assert.equal(codexTemplate, opencodeTemplate);
   assert.match(codexTemplate, /installedSurface\.memoryLoadLine/u);
   assert.match(rule, /仅当任务需要恢复项目状态且当前授权允许时读取 Memory body/u);
-  assert.match(rule, /只检查相关路径是否存在及必要元数据、不读取正文/u);
+  assert.match(rule, /只检查相关 Memory 路径是否存在及必要元数据、不读取其正文/u);
   assert.match(installPlanner, /仅当任务需要恢复项目状态且当前授权允许读取 Memory body 时/u);
-  assert.match(installPlanner, /当专项 Skill 给出更窄证据边界时，仅检查相关路径是否存在及必要元数据，不读取正文/u);
+  assert.match(installPlanner, /当专项 Skill 限制 Memory 证据边界时，仅检查相关 Memory 路径是否存在及必要元数据、不读取其正文/u);
 });
 
 test('legacy brand audit ignores archive assets', async () => {
