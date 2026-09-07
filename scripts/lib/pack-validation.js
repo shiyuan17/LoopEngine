@@ -387,7 +387,7 @@ export async function validateContentQuality(rootDir) {
   const checks = [
     {
       file: 'docs/rules/governance-core.md',
-      terms: ['获取可信事实 → 判定并执行 → 聚焦验证 → 简洁交付', '事实充分性与歧义路由', '执行判定：直接实施', '快速', '轻量', '完整', '人工确认', '验证范围必须与完成主张匹配'],
+      terms: ['获取可信事实 → 判定并执行 → 聚焦验证 → 简洁交付', '事实充分性与歧义路由', '授权持续有效', '快速', '轻量', '完整', '明确授权', '验证范围必须与完成主张匹配'],
     },
     {
       file: 'templates/task.md',
@@ -407,7 +407,7 @@ export async function validateContentQuality(rootDir) {
     },
     {
       file: 'docs/rules/ai-collab-rules.md',
-      terms: ['单 Agent', '人工确认', '验证与主张匹配', '保护现有工作区'],
+      terms: ['单 Agent', '授权与批准', '验证与主张匹配', '保护现有工作区'],
     },
     {
       file: 'docs/rules/project-directory.md',

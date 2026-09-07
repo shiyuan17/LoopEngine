@@ -155,7 +155,7 @@ function validateObservation(value, caseId, configHash) {
   return null;
 }
 
-function executeRunner({ command, request, timeoutMs, signal }) {
+function executeRunner({ command, request, timeoutMs, signal, environment }) {
   let tokens;
   try {
     tokens = assertSafeCommand(command);
@@ -177,7 +177,7 @@ function executeRunner({ command, request, timeoutMs, signal }) {
     const child = spawn(program, args, {
       cwd: request.workspace,
       detached: process.platform !== 'win32',
-      env: evaluationEnvironment(process.env),
+      env: evaluationEnvironment(environment),
       shell: false,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -240,7 +240,8 @@ function executeRunner({ command, request, timeoutMs, signal }) {
   });
 }
 
-export async function runEvaluationCase({ command, definition, configHash = 'fixture-v1', repetition = 1, runId = 'online', timeoutMs = DEFAULT_TIMEOUT_MS, judge, sourceRoot, signal }) {
+/** @param {{command: string, definition: any, configHash?: string, repetition?: number, runId?: string, timeoutMs?: number, judge?: any, sourceRoot?: string, signal?: AbortSignal, environment?: NodeJS.ProcessEnv}} options */
+export async function runEvaluationCase({ command, definition, configHash = 'fixture-v1', repetition = 1, runId = 'online', timeoutMs = DEFAULT_TIMEOUT_MS, judge, sourceRoot, signal, environment = process.env }) {
   let workspace;
   let report;
   try {
@@ -256,7 +257,7 @@ export async function runEvaluationCase({ command, definition, configHash = 'fix
         input: { ...definition.input, scenario: evaluationPrompt(definition) },
       },
     };
-    const result = await executeRunner({ command, request, timeoutMs, signal });
+    const result = await executeRunner({ command, request, timeoutMs, signal, environment });
     if (!result.observation) {
       report = {
         code: result.code,

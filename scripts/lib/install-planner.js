@@ -160,7 +160,7 @@ export function createInstalledSurface({ clarificationPosture = 'balanced', cust
 
   const installedSurface = {
     clarificationPostureLine: hasSkill('clarify-requirements/SKILL.md')
-      ? `- 需求澄清姿态：\`${clarificationPosture}\`（action-leaning 偏向采用最小可逆默认值直接推进；balanced 按规则判断；conservative 对跨模块或公共契约改动也倾向先确认）。`
+      ? `- 需求澄清姿态：\`${clarificationPosture}\`（action-leaning 偏向采用最小可逆默认值直接推进；balanced 按规则判断；conservative 对尚未解决的高影响分歧更谨慎）。`
       : '',
     codebaseMemoryMcpLine: hasCodebaseMemoryMcp
       ? '- codebase-memory-mcp 规则位于 `docs/rules/codebase-memory-mcp.md`。'
@@ -190,7 +190,7 @@ export function createInstalledSurface({ clarificationPosture = 'balanced', cust
     reviewLoopLine: '',
     rulesLine: hasPrefix('docs/rules/') ? '- 规则位于 `docs/rules/`。' : '',
     skillRoutingLine: detectedSkillRoots.length > 0
-      ? '宿主按 Skill description 原生选择一个当前阶段所需能力；不使用 Router 或流程 Skill 链。'
+      ? '宿主按 Skill description 选择当前所需能力，按需补充互补 Skill；不使用 Router 或流程 Skill 链。'
       : '当前 profile 未安装 Skills；仅按已安装规则和模板执行，不引用未安装的 skill。',
     skillsLine: detectedSkillRoots.length > 0 ? `- Skills 位于 ${detectedSkillRoots.map((root) => `\`${root}/\``).join('、')}。` : '',
     templatesLine: hasPrefix('docs/templates/') ? '- 模板位于 `docs/templates/`。' : '',
@@ -201,7 +201,7 @@ export function createInstalledSurface({ clarificationPosture = 'balanced', cust
   if (installedSurface.memoryLoadLine) {
     installedSurface.memoryLoadLine = '仅当任务需要恢复项目状态且当前授权允许读取 Memory body 时，'
       + installedSurface.memoryLoadLine
-      + ' 当专项 Skill 给出更窄证据边界时，仅检查相关路径是否存在及必要元数据，不读取正文。';
+      + ' 当专项 Skill 限制 Memory 证据边界时，仅检查相关 Memory 路径是否存在及必要元数据、不读取其正文；不限制任务相关源码阅读。';
   }
   installedSurface.discoveryLine = toolDiscoveryLine(installedProviderModules);
   if (hasRoles) {
