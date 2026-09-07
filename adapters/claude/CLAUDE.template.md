@@ -4,7 +4,7 @@
 
 ## 启动
 
-1. 先读取 `docs/rules/governance-core.md`；只有出现 Skill 或专项领域信号时再读取 `docs/rules/AGENT_SKILL_ROUTING.md` 和一个命中的专项规则。
+1. 先读取 `docs/rules/governance-core.md`；只有出现 Skill 或专项领域信号时再读取 `docs/rules/AGENT_SKILL_ROUTING.md` 和当前需要的专项规则。
 2. {{projectProfile.vcsStatusInstruction}}
 3. {{installedSurface.discoveryLine}}
 4. 将任务归为快速、轻量或完整，并选择与主张匹配的验证。
@@ -12,7 +12,7 @@
 
 ## 硬边界
 
-- 只在授权范围内行动；红区、生产、权限、凭据、外部写入和不可逆操作先获人工确认。
+- 只在授权范围内行动；红区、生产、权限、凭据、外部写入和不可逆操作按 governance-core 的授权与批准规则执行；缺少覆盖授权时人工确认，已有覆盖授权不重复确认。
 - 不编造事实或证据；没有本轮有效验证不得声称完成。
 - 任务记录是可选的人读文档，不触发测试、Review、子 Agent 或完成门禁。
 - 当前宿主提供稳定的 PreToolUse 与 PermissionRequest 安全 Hook；配置文件存在只证明 configured-unverified，需在 Claude Code 中复核实际激活状态。
@@ -40,4 +40,4 @@
 {{installedSurface.toolingLine}}
 {{installedSurface.skillRoutingLine}}
 
-规则优先级：平台系统与用户本轮指令优先；目标项目明确的本地规则优先于 Vibe-Harness 默认规则；目录级规则只作用于其子树。同一层级冲突时停止并请求确认。
+规则优先级：平台系统与用户本轮指令优先；目标项目明确的本地规则优先于 Vibe-Harness 默认规则；目录级规则只作用于其子树。先按优先级、适用范围和当前明确指令解析冲突；仅对仍影响结果且无法解决的实质冲突请求澄清。
