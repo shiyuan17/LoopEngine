@@ -76,4 +76,4 @@ Vibe-Harness 自身使用 Conventional Commits、pre-commit、pre-push、lint �
 - 不使用 <code>git reset --hard</code>、<code>git checkout --</code> 或破坏性清理覆盖用户改动，除非用户明确要求。
 - 不把构建产物、依赖缓存、VCS 元数据或用户未归属改动混入提交。
 - 不以时间间隔、文件行数、变更数量或工具调用边界触发提交。
-- 不把本地孤立分支、未合并 worktree 或未验证 commit 当作完成状态。
+- 本地孤立分支或未合并 worktree 可以支撑已验证的本地交付，但不能据此宣称已集成、推送或发布；未验证 commit 不支撑对应完成主张。
