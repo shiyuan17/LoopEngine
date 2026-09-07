@@ -5,7 +5,7 @@ description: Use when executing, reviewing, verifying, refining, or synchronizin
 
 # Linear 工作流
 
-高风险执行只接受 v2 Execution Envelope：它冻结 riskClass、workspace identity、允许写入根、无凭据 external targets 和宿主 enforcement 证明。v1 仅作 contract-only/degraded 兼容，不能授权凭据、hostWrite、externalWrite、高风险间接写入或 worktree 拓扑变化。每次自动续跑前重读原生 Goal、thread status、最新用户输入、当前 Issue、cwd、worktree、branch、HEAD 和 blocker；达到终点、等待审批、workspace 漂移、未归属 HEAD 或同一 blocker 连续三次时停止。没有原生 Goal bridge 时只返回 checkpoint，不跨 turn 自主续跑。
+高风险执行只接受 v2 Execution Envelope：它冻结 riskClass、workspace identity、允许写入根、无凭据 external targets 和宿主 enforcement 证明。v1 仅作 contract-only/degraded 兼容，不能授权凭据、hostWrite、externalWrite、高风险间接写入或 worktree 拓扑变化。每次自动续跑核对宿主实际提供的 Goal/thread 状态、最新用户输入、当前 Issue、cwd、worktree、branch、HEAD 和 blocker；授权沿用、局部暂停和无进展时的诊断遵循 governance-core，Goal 状态使用宿主工具合同。无原生 Goal bridge 时不声称后台持续执行，不阻止用户继续请求或宿主显式续跑恢复原范围工作。
 
 本 Skill 操作 Linear 工作项，不替代项目治理、Git 规则、测试或人工权限门禁。V1.1 禁止自动领取，也就是不自动从队列领单：不扫描或轮询 Ready Queue，不创建 Webhook 调度器、Linear Loop、leader lease、自动超时回收或自动重派。
 

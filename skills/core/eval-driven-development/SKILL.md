@@ -12,9 +12,9 @@ description: Use for nondeterministic Agent rules, Skills, prompts, Hooks, or ro
 ## 执行
 
 1. 用真实输入定义一个会失败的 `Eval-ID`，注明必须行为、禁止行为、风险和确定性断言。
-2. 修改前冻结同模型、runner、预算和规则/提示指纹的参考结果。
+2. 修改前冻结 fixture、suite、模型配置、runner、预算、评分标准和旧规则/提示指纹的参考结果。
 3. 实施最小改动；确定性部分同时运行普通测试。
-4. 用相同条件重跑，比较成功率、Token、墙钟、交互、工具调用和错误完成声明。
+4. 保持其他实验条件一致，用新规则/提示指纹重跑；被修改资产是实验变量。比较成功率、Token、墙钟、交互、工具调用和错误完成声明。
 5. critical 必须全部通过；reference 变更必须独立审查。
 
 online run 按 `repetitions` 独立运行多轮，输出 `trialSummaries`（`passAt1`/`passAtK`/`passCaretK`/逐轮明细）作为可靠性报告；稳定性只统计多轮 case 并同时报告覆盖率，当前不新增阈值门禁。offline 为确定性 replay，不输出多轮摘要。
