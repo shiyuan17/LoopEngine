@@ -19,7 +19,7 @@
       "tests": ["tests/execution-simplification.test.js"],
       "profiles": ["minimal", "core", "full", "docs-only"],
       "docs": ["docs/rules/governance-core.md", "docs/templates/task.md"],
-      "evaluation": { "required": true, "suites": ["evals/suites/vibe-harness-online-canary.json"] }
+      "evaluation": { "required": true, "suites": ["evals/suites/vibe-harness-online-canary.json", "evals/suites/vibe-harness-online-autonomy.json"] }
     },
     {
       "id": "lightweight-task-dag",

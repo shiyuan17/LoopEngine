@@ -306,6 +306,12 @@
     },
     {
       "group": "evals-online",
+      "source": "evals/suites/vibe-harness-online-autonomy.json",
+      "target": ".agents/evals/suites/vibe-harness-online-autonomy.json",
+      "contentStrategy": "replace"
+    },
+    {
+      "group": "evals-online",
       "source": "evals/suites/vibe-harness-role-routing.json",
       "target": ".agents/evals/suites/vibe-harness-role-routing.json",
       "contentStrategy": "replace"
