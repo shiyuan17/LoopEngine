@@ -116,9 +116,10 @@ test('Terminal-Bench delegates to pinned Harbor dataset with ATIF export and one
   assertDryRunPlan(plan);
   assert.equal(plan.program, 'harbor');
   assert.equal(plan.args[plan.args.indexOf('-d') + 1], `${task.dataset}@${task.datasetRevision}`);
-  assert.equal(plan.args[plan.args.indexOf('--include-task-name') + 1], task.id);
+  assert.equal(plan.args[plan.args.indexOf('--include-task-name') + 1], 'terminal-bench/chess-best-move');
   assert.equal(plan.args[plan.args.indexOf('--n-concurrent') + 1], '1');
   assert.equal(plan.args.includes('--export-traces'), true);
+  assert.deepEqual(plan.env, { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' });
 
   const result = terminalBenchAdapter.normalize(task, plan, await fixture('terminal-bench/official-result.fixture.json'));
   assert.equal(result.outcome, 'passed');

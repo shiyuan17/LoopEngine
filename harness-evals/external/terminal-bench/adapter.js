@@ -30,12 +30,14 @@ export const terminalBenchAdapter = Object.freeze({
     if (!path.isAbsolute(outputDir)) throw new Error('outputDir must be absolute');
     if (!model) throw new Error('model is required');
     const { task, runIdentity } = materialized;
+    const datasetNamespace = task.dataset.split('/')[0];
+    const officialTaskName = task.id.includes('/') ? task.id : `${datasetNamespace}/${task.id}`;
     return createCommandPlan({
       program: harbor,
       args: [
         'run',
         '-d', `${task.dataset}@${task.datasetRevision}`,
-        '--include-task-name', task.id,
+        '--include-task-name', officialTaskName,
         '-a', agent,
         '-m', model,
         '--job-name', runIdentity.runId,
@@ -46,6 +48,9 @@ export const terminalBenchAdapter = Object.freeze({
       cwd,
       outputDir,
       runIdentity,
+      // Harbor renders Rich tables at process exit. Keep official output
+      // UTF-8 on Windows hosts whose console code page is not Unicode.
+      env: { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
     });
   },
   normalize(task, run, officialResult) {

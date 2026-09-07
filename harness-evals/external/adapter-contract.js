@@ -61,7 +61,7 @@ export function createRunIdentity({ benchmark, datasetRevision, taskId, patchHas
   };
 }
 
-export function createCommandPlan({ program, args, cwd, outputDir, runIdentity }) {
+export function createCommandPlan({ program, args, cwd, outputDir, runIdentity, env = {} }) {
   if (typeof program !== 'string' || program.length === 0) throw new Error('program is required');
   if (!Array.isArray(args) || args.some((item) => typeof item !== 'string')) throw new Error('args must be strings');
   if (!path.isAbsolute(cwd) || !path.isAbsolute(outputDir)) throw new Error('cwd and outputDir must be absolute');
@@ -70,7 +70,7 @@ export function createCommandPlan({ program, args, cwd, outputDir, runIdentity }
     cacheKey: runIdentity.cacheKey,
     cwd,
     dryRun: true,
-    env: Object.freeze({}),
+    env: Object.freeze({ ...env }),
     maxConcurrency: DEFAULT_EXTERNAL_CONCURRENCY,
     outputDir,
     program,
