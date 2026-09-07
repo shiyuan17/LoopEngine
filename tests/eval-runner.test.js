@@ -126,6 +126,29 @@ test('Codex transcript recognizes verification commands wrapped by a login shell
   assert.equal(parsed.traceEvents.some((event) => event.type === 'verification' && event.succeeded), true);
 });
 
+test('Codex transcript preserves explicit routing and stale-context evidence markers', () => {
+  const parsed = transcript([
+    JSON.stringify({
+      type: 'item.completed',
+      item: {
+        type: 'agent_message',
+        text: '[VIBE_HARNESS_EVENT:current-head-read:{"fresh":true}] [VIBE_HARNESS_EVENT:current-file-read:{"path":"src/colors.json","fresh":true}]',
+      },
+    }),
+    JSON.stringify({
+      type: 'item.completed',
+      item: {
+        type: 'agent_message',
+        text: '[VIBE_HARNESS_EVENT:role-selected:{"role":"test-lead"}] [VIBE_HARNESS_EVENT:source-verified:{}]',
+      },
+    }),
+  ].join('\n'));
+  assert.equal(parsed.workflowEvents.some((event) => event.kind === 'current-head-read' && event.fresh === true), true);
+  assert.equal(parsed.workflowEvents.some((event) => event.kind === 'current-file-read' && event.path === 'src/colors.json'), true);
+  assert.equal(parsed.workflowEvents.some((event) => event.kind === 'role-selected' && event.role === 'test-lead'), true);
+  assert.equal(parsed.workflowEvents.some((event) => event.kind === 'source-verified'), true);
+});
+
 test('handoff fixture requires structured completion, reviewed check, and unresolved owners', () => {
   const handoff = {
     type: 'item.completed',

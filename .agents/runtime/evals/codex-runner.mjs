@@ -11,7 +11,9 @@ import { knowledgeCoverageEpisode, taskEpisode } from './lib/knowledge-coverage.
 
 const LIMIT = 1024 * 1024;
 const RUNNER_ID = 'codex-reference@2';
-const CREDENTIAL_ERROR = /\b(?:api[-_ ]?key|auth(?:entication|orization)?|credentials?|login|unauthorized)\b/iu;
+// Only classify explicit authentication failures as credential errors. Normal
+// task output may mention auth/credentials while the CLI is otherwise healthy.
+const CREDENTIAL_ERROR = /(?:\b(?:401|403)\b|(?:(?:invalid|missing|expired|revoked)\s+(?:api[-_ ]?key|credentials?)|(?:api[-_ ]?key|credentials?)\s+(?:is|are)?\s*(?:missing|invalid|expired|revoked))|authentication\s+(?:failed|required)|unauthorized|login\s+required)/iu;
 const codexEnvironmentNames = new Set([
   'ALL_PROXY', 'APPDATA', 'AZURE_OPENAI_API_KEY', 'CODEX_HOME', 'COMSPEC', 'HOME',
   'HTTPS_PROXY', 'HTTP_PROXY', 'LANG', 'LC_ALL', 'LC_CTYPE', 'LOCALAPPDATA', 'NO_PROXY',
@@ -632,7 +634,7 @@ export function finalChangeValidationSummary(workflowEvents) {
     verificationAfterFinalChangeCount: afterFinalChange.length,
     verificationBeforeFinalChangeCount: beforeFinalChange.length,
   };
-  if (closureAcceptances.length > 0) summary.closureAccepted = closureAccepted;
+  if (closureAcceptances.length > 0) summary.closureAccepted = closureAcceptances.some((event) => event.accepted === true);
   return summary;
 }
 
@@ -656,11 +658,17 @@ function workflowReviewEvents(text, index, item = {}) {
 function handoffContract(text, item = {}) {
   let payload = item.handoff ?? item.handoffContract ?? null;
   if (!payload && typeof text === 'string') {
-    const candidate = text.match(/\{[\s\S]*\}/u)?.[0];
-    if (candidate) {
+    const candidates = [
+      ...[...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/giu)].map((match) => match[1]),
+      text.match(/\{"schema"\s*:\s*"vibe-harness\.handoff\/v1"[\s\S]*?\}/u)?.[0],
+    ].filter(Boolean);
+    for (const candidate of candidates) {
       try {
         const parsed = JSON.parse(candidate);
-        if (parsed?.schema === 'vibe-harness.handoff/v1' || parsed?.handoff) payload = parsed.handoff ?? parsed;
+        if (parsed?.schema === 'vibe-harness.handoff/v1' || parsed?.handoff) {
+          payload = parsed.handoff ?? parsed;
+          break;
+        }
       } catch {}
     }
   }
@@ -668,6 +676,11 @@ function handoffContract(text, item = {}) {
   const completion = payload.completion ?? {};
   const finalCheck = payload.finalCheck ?? payload.reviewedCheck ?? {};
   const unresolved = payload.unresolvedItems ?? payload.unresolved ?? [];
+  const goal = payload.goal ?? payload.objective ?? null;
+  const writeScope = payload.writeScope ?? payload.write_scope ?? payload.allowedWritePaths ?? null;
+  const head = payload.head ?? payload.HEAD ?? payload.gitHead ?? null;
+  const dependencyStatus = payload.dependencyStatus ?? payload.dependency_status ?? payload.dependencies ?? null;
+  const verificationStatus = payload.verificationStatus ?? payload.verification_status ?? finalCheck.status ?? null;
   const unresolvedOwners = Array.isArray(unresolved)
     ? unresolved.filter((entry) => entry && typeof entry.owner === 'string' && entry.owner.trim() !== '').length
     : 0;
@@ -678,6 +691,11 @@ function handoffContract(text, item = {}) {
     || finalCheck.relevance === 'reviewed';
   const structuredCompletion = ['complete', 'in-progress', 'blocked'].includes(completionStatus);
   return {
+    goal: typeof goal === 'string' && goal.trim() !== '' ? goal : null,
+    writeScope: Array.isArray(writeScope) ? writeScope : (typeof writeScope === 'string' && writeScope.trim() !== '' ? writeScope : null),
+    head: typeof head === 'string' && head.trim() !== '' ? head : null,
+    dependencyStatus: typeof dependencyStatus === 'string' && dependencyStatus.trim() !== '' ? dependencyStatus : null,
+    verificationStatus: typeof verificationStatus === 'string' && verificationStatus.trim() !== '' ? verificationStatus : null,
     structuredCompletion,
     completionStatus,
     completionAccepted,
@@ -730,6 +748,51 @@ export function inputEventFromContext(event) {
   return null;
 }
 
+function collaborationWorkflowEvents(event, item, index, text = '') {
+  const events = [];
+  const invocation = item?.invocation ?? item?.arguments?.invocation ?? item?.input?.invocation ?? {};
+  const name = String(invocation?.name ?? item?.name ?? item?.type ?? '').toLowerCase();
+  const itemText = [text, item?.message, item?.text, item?.aggregated_output, item?.output]
+    .filter((value) => typeof value === 'string').join(' ');
+  const normalized = itemText.toLowerCase();
+  const add = (kind, fields = {}) => events.push({ index, kind, source: 'agent', ...fields });
+  const markerFields = (raw) => {
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch {}
+    const fields = {};
+    for (const part of raw.split(/[;,]\s*/u)) {
+      const match = part.match(/^([A-Za-z][A-Za-z0-9_-]*)\s*=\s*(.+)$/u);
+      if (!match) continue;
+      const value = match[2].trim();
+      fields[match[1]] = /^(?:true|false)$/iu.test(value) ? value.toLowerCase() === 'true' : value;
+    }
+    return fields;
+  };
+  const successful = event.type !== 'item.completed' || !item?.status || !/fail|error|denied/iu.test(item.status);
+  if (/(?:compaction|context[_ -]?compacted|context[_ -]?compression)/u.test(event?.type ?? '')
+    || /(?:compaction|context[_ -]?compacted|context[_ -]?compression)/u.test(name + ' ' + normalized)) add('compaction', { succeeded: successful });
+  // Collaboration semantics require a structured tool invocation or an
+  // explicit evidence marker; ordinary progress prose is not evidence.
+  if (/(?:dispatch|spawn|create[_ -]?thread|send[_ -]?message[_ -]?to[_ -]?thread|fork|delegate|assign[_ -]?agent)/u.test(name)) {
+    add('agent-dispatch', { succeeded: successful });
+  }
+  if (/(?:wait|join|result|complete|completed)/u.test(name)
+    && /(?:collab|agent|subagent|worker|thread)/u.test(name)) {
+    add('agent-complete', { succeeded: successful });
+  }
+  for (const marker of itemText.matchAll(/\[VIBE_HARNESS_EVENT:(compaction|agent-dispatch|agent-complete|ownership|agent-conflict|repair|verification|clarification-requested|current-head-read|current-file-read|role-selected|no-subagent-dispatch|unauthorized-action-refused|role-reselected-after-action-change|no-capable-role|codebase-memory-index-checked|codebase-memory-search-graph-used|codebase-memory-trace-call-path-used|ast-grep-outline-used|ast-grep-run-used|ast-grep-scope-minimized|rg-used|text-search-scope-minimized|high-output-shell-routed|ast-grep-bypassed|mcp-runtime-bypassed|interactive-command-bypassed|raw-evidence-bypassed|source-verified)(?::([^\]]+))?\]/giu)) {
+    const fields = markerFields(marker[2]?.trim().slice(0, 1000));
+    if (typeof fields.succeeded === 'string') fields.succeeded = fields.succeeded !== 'false';
+    if (typeof fields.disjoint === 'string') fields.disjoint = fields.disjoint !== 'false';
+    if (typeof fields.fresh === 'string') fields.fresh = fields.fresh !== 'false';
+    add(marker[1].toLowerCase(), { explicit: true, ...fields, ...(marker[2] ? { detail: marker[2].trim().slice(0, 200) } : {}) });
+  }
+  return events;
+}
+
 export function transcript(stdout) {
   const events = [];
   const commands = [];
@@ -753,6 +816,15 @@ export function transcript(stdout) {
       if (typeof event.item?.type === 'string') {
         events.push(event.item.type);
         const eventIndex = workflowEvents.length;
+        const itemText = event.item?.text ?? event.item?.message ?? event.message?.content ?? event.text ?? '';
+        const collaborationEvents = collaborationWorkflowEvents(event, event.item, eventIndex, itemText);
+        workflowEvents.push(...collaborationEvents);
+        traceEvents.push(...collaborationEvents.map((workflow) => ({
+          type: workflow.kind,
+          source: workflow.source ?? 'agent',
+          ...workflow,
+          timestamp: event.timestamp ?? new Date(traceEvents.length).toISOString(),
+        })));
         if (event.type === 'item.completed' && isMaterialChangeItem(event.item)) {
           workflowEvents.push({ index: eventIndex, kind: 'change' });
           traceEvents.push({
@@ -765,7 +837,14 @@ export function transcript(stdout) {
           const reviewEvents = workflowReviewEvents(messageText, eventIndex, event.item);
           const handoff = handoffContract(messageText, event.item);
           workflowEvents.push(...reviewEvents);
-          if (handoff) workflowEvents.push({ index: eventIndex, kind: 'handoff', ...handoff });
+          traceEvents.push(...reviewEvents.map((workflow) => ({ type: workflow.kind, source: 'agent', ...workflow,
+            timestamp: event.timestamp ?? new Date(traceEvents.length).toISOString() })));
+          if (handoff) {
+            const workflow = { index: eventIndex, kind: 'handoff', ...handoff };
+            workflowEvents.push(workflow);
+            traceEvents.push({ type: 'handoff', source: 'agent', ...workflow,
+              timestamp: event.timestamp ?? new Date(traceEvents.length).toISOString() });
+          }
         }
         const isToolEvent = ['item.started', 'item.completed'].includes(event.type)
           && !['agent_message', 'error', 'reasoning'].includes(event.item.type);
@@ -849,7 +928,8 @@ export function transcript(stdout) {
       }
       const text = event.item?.text ?? event.message?.content ?? event.text;
       if (typeof text === 'string') {
-        messages.push(text);
+        const visibleText = text.replace(/\[VIBE_HARNESS_EVENT:[^\]]+\]\s*/giu, '').trim();
+        if (visibleText) messages.push(visibleText);
         if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
           traceEvents.push({
             type: 'message', source: 'agent', message: text,
@@ -899,13 +979,7 @@ function hasAgentOrToolEvents(parsed) {
 }
 
 function capturedTraceEvents(parsed) {
-  const events = [...parsed.traceEvents];
-  const existingKinds = new Set(events.map((event) => event.type));
-  for (const event of parsed.workflowEvents) {
-    if (existingKinds.has(event.kind)) continue;
-    events.push({ type: event.kind, source: 'agent', ...event, timestamp: new Date(events.length).toISOString() });
-  }
-  return events;
+  return parsed.traceEvents;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -936,6 +1010,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const trustedHooks = process.env.VIBE_HARNESS_EVAL_TRUST_PROJECT_HOOKS === '1'
     ? ['--dangerously-bypass-hook-trust']
     : [];
+  const boundedCase = /^(?:EVAL-HOOK-NO-AUTO-COMMIT-001|EVAL-GIT-DELIVER-00[1-4]|EVAL-LINEAR-(?:014|015|01[6-9]|020|02[1-3]))$/u.test(request.case.id);
   const sharedArgs = [
     '--json', '--skip-git-repo-check', '--ignore-user-config', ...trustedHooks,
     '--disable', 'apps', '--disable', 'plugins', '--disable', 'remote_plugin',
@@ -944,7 +1019,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     '--model', model, '-c', `model_reasoning_effort=${JSON.stringify(reasoningEffort)}`,
     '-c', 'sandbox_mode="workspace-write"',
     ...(backend !== 'native' || !usesWindowsExecutable(command.args[0] ?? command.program)
-      ? ['--enable', 'multi_agent', '--enable', 'remote_compaction_v2']
+      ? (boundedCase ? ['--disable', 'multi_agent'] : ['--enable', 'multi_agent', '--enable', 'remote_compaction_v2'])
       : []),
     ...providerArgs(),
   ];
@@ -980,9 +1055,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     ...writeSummary.events,
     ...hiddenTests.events,
     ...commandSemanticEvents(parsed.commands),
+    ...new Set(parsed.workflowEvents.map((event) => event.kind)),
     ...(request.case.reporting?.workflowDemand?.expectedOwner?.kind === 'skill'
       && request.case.reporting.workflowDemand.expectedOwner.id === 'git-deliver'
-      && /\$git-deliver|(?:use|using|invoke|invoked|调用|使用|指定)\s+git-deliver/iu.test(request.case.input.scenario)
+      && /(?:^|\n|\b)(?:\$git-deliver\b|git-deliver\s+is\s+(?:explicit|requested)|(?:explicitly\s+)?(?:invoke|invoked|request|requested|use|using|调用|使用|指定)\s+\$?git-deliver\b)/iu.test(request.case.input.scenario)
+      && !/\b(?:did\s+not|not|never|without)\s+(?:invoke|invoke[d]?|request|use)\s+\$?git-deliver\b/iu.test(request.case.input.scenario)
       ? ['git-deliver-selected', 'git-deliver-invoked'] : []),
   ];
   const toolSemantics = toolSemanticSummary(parsed.toolInvocations, {
