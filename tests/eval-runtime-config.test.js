@@ -77,6 +77,20 @@ test('explicit CODEX_MODEL overrides the configured model without changing provi
   }
 });
 
+test('explicit CODEX_REASONING_EFFORT overrides the configured reasoning effort', async () => {
+  const fixture = await codexFixture();
+  try {
+    const resolved = await resolveEvalRuntime({
+      env: { CODEX_REASONING_EFFORT: 'low', VIBE_HARNESS_EVAL_RUNTIME_SOURCE: 'codex' },
+      homeDir: fixture.homeDir,
+      resolveCliVersion: async () => 'codex-cli@reasoning-override',
+    });
+    assert.equal(resolved.environment.CODEX_REASONING_EFFORT, 'low');
+  } finally {
+    await rm(fixture.homeDir, { force: true, recursive: true });
+  }
+});
+
 test('Codex config without model_provider uses the built-in OpenAI provider', async () => {
   const homeDir = await mkdtemp(path.join(tmpdir(), 'vibe-harness-runtime-first-party-'));
   const codexHome = path.join(homeDir, '.codex');

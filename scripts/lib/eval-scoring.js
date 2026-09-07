@@ -84,7 +84,9 @@ async function evaluateOracle(oracle, observation, { scenario, judge } = {}) {
     assertions.push(assertionResult('forbidden-output-fragment', item, !output.includes(item.value)));
   }
   if (oracle.exactOutput) {
-    assertions.push(assertionResult('exact-output', oracle.exactOutput, output.trim() === oracle.exactOutput.value));
+    const lines = output.trim().split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
+    const finalLine = lines.at(-1) ?? '';
+    assertions.push(assertionResult('exact-output', oracle.exactOutput, finalLine === oracle.exactOutput.value));
   }
   for (const item of oracle.requiredArtifacts) {
     assertions.push(assertionResult('required-artifact', item, artifacts.includes(item.value)));
@@ -196,6 +198,17 @@ export function compareFingerprints(actual, expected) {
           });
         }
       }
+    }
+  }
+  if (actual?.execution || expected?.execution) {
+    const actualExecution = JSON.stringify(actual?.execution ?? null);
+    const expectedExecution = JSON.stringify(expected?.execution ?? null);
+    if (actualExecution !== expectedExecution) {
+      mismatches.push({
+        field: 'execution',
+        actual: actual?.execution ?? null,
+        expected: expected?.execution ?? null,
+      });
     }
   }
   return { match: mismatches.length === 0, mismatches };

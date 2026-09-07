@@ -151,7 +151,7 @@ async function fromCodexConfig({ backend, env, homeDir }) {
   if (config.model_provider !== undefined && (!provider || typeof provider !== 'object')) {
     throw new Error(`Codex config provider is missing: ${providerName}`);
   }
-  const reasoning = config.model_reasoning_effort ?? 'medium';
+  const reasoning = env.CODEX_REASONING_EFFORT ?? config.model_reasoning_effort ?? 'medium';
   validateChoice(reasoning, REASONING_EFFORTS, 'Codex config model_reasoning_effort');
   const authFile = path.join(home, 'auth.json');
   const requiresAuth = provider?.requires_openai_auth !== false;

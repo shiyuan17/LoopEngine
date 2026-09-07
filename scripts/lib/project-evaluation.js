@@ -81,6 +81,51 @@ const CONFIG_PATHS = [
   'templates',
 ];
 
+const DEFAULT_ONLINE_CASE_WALL_TIME_MS = 10 * 60 * 1000;
+
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function caseWallTimeMs(config, definition) {
+  const overrides = config.evaluations?.onlineCaseWallTimeMsByCase;
+  const override = overrides && typeof overrides === 'object'
+    ? positiveInteger(overrides[definition.id])
+    : null;
+  return override
+    ?? positiveInteger(config.evaluations?.onlineCaseWallTimeMs)
+    ?? DEFAULT_ONLINE_CASE_WALL_TIME_MS;
+}
+
+function onlineExecutionFingerprint(config, suite, jobs = null, concurrency = null) {
+  const definitions = jobs
+    ? [...new Map(jobs.map((job) => [job.definition.id, job.definition])).values()]
+    : suite.cases;
+  const requestedConcurrency = positiveInteger(config.evaluations?.onlineConcurrency) ?? 1;
+  const effectiveConcurrency = concurrency ?? Math.min(requestedConcurrency, Math.max(definitions.length, 1));
+  return {
+    suiteWallTimeMs: positiveInteger(config.evaluations?.onlineWallTimeMs) ?? 0,
+    concurrency: effectiveConcurrency,
+    defaultCaseWallTimeMs: DEFAULT_ONLINE_CASE_WALL_TIME_MS,
+    caseWallTimeMsByCase: Object.fromEntries(definitions
+      .map((definition) => [definition.id, caseWallTimeMs(config, definition)])
+      .sort(([left], [right]) => left.localeCompare(right))),
+    repetitions: definitions
+      .map((definition) => ({
+        id: definition.id,
+        count: Math.min(definition.repetitions ?? config.evaluations.repetitions, config.evaluations.repetitions),
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  };
+}
+
+function onlineExecutionHash(config, suite) {
+  return createHash('sha256')
+    .update(JSON.stringify(onlineExecutionFingerprint(config, suite)))
+    .digest('hex');
+}
+
 async function configFiles(root, relative) {
   const absolute = path.join(root, relative);
   try {
@@ -173,7 +218,7 @@ async function buildOnlineRun({ campaignId, command, config, now, suite, suitePa
   };
   const runConfigHash = combineEvalConfigHash(
     await configHash(targetDir),
-    process.env.VIBE_HARNESS_EVAL_RUNTIME_HASH,
+    `${process.env.VIBE_HARNESS_EVAL_RUNTIME_HASH ?? 'runtime-unspecified'}:${onlineExecutionHash(config, suite)}`,
   );
   // Create a judge client only when the suite actually contains llmRubrics
   // assertions, so suites without judge assertions never require credentials.
@@ -192,12 +237,34 @@ async function buildOnlineRun({ campaignId, command, config, now, suite, suitePa
   const caseRepetitions = [];
   const trialsByCase = new Map();
   let eligibleLegalWriteTrials = 0;
-  evaluationLoop: for (const definition of suite.cases) {
+  const jobs = [];
+  for (const definition of suite.cases) {
     const repetitions = Math.min(definition.repetitions ?? config.evaluations.repetitions, config.evaluations.repetitions);
     caseRepetitions.push({ id: definition.id, count: repetitions });
     for (let repetition = 1; repetition <= repetitions; repetition += 1) {
       const legalWriteEligible = (definition.input?.fixture?.allowedWritePaths ?? []).length > 0;
       if (legalWriteEligible) eligibleLegalWriteTrials += 1;
+      jobs.push({ definition, repetition, legalWriteEligible });
+    }
+  }
+  const requestedConcurrency = Number(config.evaluations.onlineConcurrency ?? 1);
+  const concurrency = Number.isInteger(requestedConcurrency) && requestedConcurrency > 0
+    ? Math.min(requestedConcurrency, jobs.length || 1)
+    : 1;
+  const trialReports = new Array(jobs.length);
+  let nextJob = 0;
+  let stopScheduling = false;
+  const suiteWallTimeMs = Number(config.evaluations.onlineWallTimeMs ?? 0);
+  const watchdog = Number.isInteger(suiteWallTimeMs) && suiteWallTimeMs > 0
+    ? new AbortController()
+    : null;
+  const watchdogTimer = watchdog ? setTimeout(() => watchdog.abort(), suiteWallTimeMs) : null;
+  async function worker() {
+    while (true) {
+      if (stopScheduling || watchdog?.signal.aborted) return;
+      const index = nextJob++;
+      if (index >= jobs.length) return;
+      const { definition, repetition, legalWriteEligible } = jobs[index];
       const result = await runEvaluationCase({
         command,
         definition,
@@ -206,34 +273,49 @@ async function buildOnlineRun({ campaignId, command, config, now, suite, suitePa
         runId: campaignId,
         judge,
         sourceRoot: targetDir,
+        signal: watchdog?.signal,
+        timeoutMs: caseWallTimeMs(config, definition),
       });
-      if (result.status !== 'ready') {
-        degraded.push(...result.diagnostics.map((item) => `${definition.id}: ${item}`));
-        attempts.push({
-          caseId: definition.id,
-          repetition,
-          status: 'degraded',
-          diagnostics: result.diagnostics,
-          code: result.code ?? 'EVAL_RUNNER_UNAVAILABLE',
-        });
-        const safetyFalsePositive = (definition.input?.fixture?.allowedWritePaths ?? []).length > 0
-          && result.diagnostics.some((item) => /sandbox-write-denied|policy-denied|workspace execution backend is unavailable/iu.test(item));
-        if (safetyFalsePositive) attempts.at(-1).safetyFalsePositive = true;
-        break evaluationLoop;
-      }
-      observations.push(result.observation);
-      attempts.push({
+      trialReports[index] = { definition, repetition, legalWriteEligible, result };
+      if (concurrency === 1 && result.status !== 'ready') stopScheduling = true;
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  if (watchdogTimer) clearTimeout(watchdogTimer);
+  const unfinishedTrials = jobs.length - trialReports.filter(Boolean).length;
+  if (unfinishedTrials > 0 && watchdog?.signal.aborted) {
+    degraded.push(`${unfinishedTrials} trial(s) were not started before the suite wall-time watchdog expired`);
+  }
+  for (const trial of trialReports) {
+    if (!trial) continue;
+    const { definition, repetition, legalWriteEligible, result } = trial;
+    if (result.status !== 'ready') {
+      degraded.push(...result.diagnostics.map((item) => `${definition.id}: ${item}`));
+      const attempt = {
         caseId: definition.id,
         repetition,
-        status: 'ready',
-        passed: result.caseResult.passed,
-        score: result.caseResult.score,
-        criticalFailures: result.caseResult.criticalFailures,
-      });
-      const group = trialsByCase.get(definition.id) ?? [];
-      group.push({ caseResult: result.caseResult, observation: result.observation });
-      trialsByCase.set(definition.id, group);
+        status: 'degraded',
+        diagnostics: result.diagnostics,
+        code: result.code ?? 'EVAL_RUNNER_UNAVAILABLE',
+      };
+      const safetyFalsePositive = legalWriteEligible
+        && result.diagnostics.some((item) => /sandbox-write-denied|policy-denied|workspace execution backend is unavailable/iu.test(item));
+      if (safetyFalsePositive) attempt.safetyFalsePositive = true;
+      attempts.push(attempt);
+      continue;
     }
+    observations.push(result.observation);
+    attempts.push({
+      caseId: definition.id,
+      repetition,
+      status: 'ready',
+      passed: result.caseResult.passed,
+      score: result.caseResult.score,
+      criticalFailures: result.caseResult.criticalFailures,
+    });
+    const group = trialsByCase.get(definition.id) ?? [];
+    group.push({ caseResult: result.caseResult, observation: result.observation });
+    trialsByCase.set(definition.id, group);
   }
   const completedDefinitions = suite.cases.filter((definition) => (trialsByCase.get(definition.id) ?? []).length > 0);
   const results = completedDefinitions.map((definition) => {
@@ -377,7 +459,7 @@ export async function runProjectEvaluations({ campaignId = `campaign-${Date.now(
             runner: `codex-reference@2-${process.env.VIBE_HARNESS_EVAL_CODEX_BACKEND ?? 'native'}`,
             model: process.env.CODEX_MODEL ?? 'unavailable',
             agent: process.env.CODEX_CLI_VERSION ?? 'unavailable',
-            configHash: process.env.VIBE_HARNESS_EVAL_RUNTIME_HASH ?? 'unavailable',
+            configHash: `${process.env.VIBE_HARNESS_EVAL_RUNTIME_HASH ?? 'unavailable'}:${onlineExecutionHash(config, suite)}`,
             assets: await createEvalAssetFingerprint(targetDir),
           },
           diagnostics: warnings,

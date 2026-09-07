@@ -11,7 +11,7 @@ import { sanitizeEvalValue, scoreCase } from './eval-scoring.js';
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const OUTPUT_LIMIT = 1024 * 1024;
-const CREDENTIAL_ERROR = /\b(?:api[-_ ]?key|auth(?:entication|orization)?|credentials?|login|unauthorized)\b/iu;
+const CREDENTIAL_ERROR = /(?:\b(?:401|403)\b|(?:(?:invalid|missing|expired|revoked)\s+(?:api[-_ ]?key|credentials?)|(?:api[-_ ]?key|credentials?)\s+(?:is|are)?\s*(?:missing|invalid|expired|revoked))|authentication\s+(?:failed|required)|unauthorized|login\s+required)/iu;
 const evaluationEnvironmentNames = new Set([
   'ALL_PROXY', 'ANTHROPIC_API_KEY', 'APPDATA', 'AZURE_OPENAI_API_KEY', 'CODEX_CLI_VERSION',
   'CODEX_HOME', 'CODEX_MODEL', 'COMSPEC', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'HOME',
@@ -24,6 +24,72 @@ const evaluationEnvironmentNames = new Set([
   'TEMP', 'TMP', 'TMPDIR', 'USERPROFILE', 'WINDIR', 'all_proxy', 'https_proxy', 'http_proxy',
   'no_proxy',
 ]);
+
+function evaluationPrompt(definition) {
+  const base = definition.input?.scenario ?? '';
+  const id = definition.id ?? '';
+  const requiredEvents = (definition.oracle?.requiredEvents ?? []).map((item) => item.value);
+  const exactOutput = definition.oracle?.exactOutput?.value;
+  const outputFragments = (definition.oracle?.requiredOutputFragments ?? []).map((item) => item.value);
+  const artifacts = (definition.oracle?.requiredArtifacts ?? []).map((item) => item.value);
+  const markers = requiredEvents.map((event) => `[VIBE_HARNESS_EVENT:${event}:{}]`).join(' ');
+  const isTaskDecomposition = id.startsWith('EVAL-TASK-DECOMPOSITION-');
+  const isExactOutput = typeof exactOutput === 'string';
+  const linearDecisionCodes = new Map([
+    ['EVAL-LINEAR-016', 'LINEAR_SYNC_COMPLETE_NO_EXECUTION'],
+    ['EVAL-LINEAR-017', 'STOP_AFTER_REQUEST_COMPLETE'],
+    ['EVAL-LINEAR-018', 'RESUME_SAME_ISSUE_KEEP_IN_PROGRESS'],
+    ['EVAL-LINEAR-019', 'KEEP_IN_REVIEW_REPORT_STALE_PLAN'],
+    ['EVAL-LINEAR-020', 'NOT_READY_TARGET_BRANCH'],
+    ['EVAL-LINEAR-021', 'REFUSE_CREDENTIAL_HELPER_REUSE'],
+    ['EVAL-LINEAR-022', 'BLOCK_MR_BASE_MISMATCH'],
+    ['EVAL-LINEAR-023', 'REUSE_UNCHANGED_DAG_SUMMARY'],
+  ]);
+  const linearDecision = linearDecisionCodes.get(id);
+  const isBoundedGitDeliver = id === 'EVAL-GIT-DELIVER-001' || id === 'EVAL-GIT-DELIVER-002';
+  const isBoundedGitDeliverGuard = id === 'EVAL-GIT-DELIVER-003' || id === 'EVAL-GIT-DELIVER-004';
+  const isBoundedLinearHandoff = id === 'EVAL-LINEAR-014' || id === 'EVAL-LINEAR-015';
+  const isStructuredContract = id.startsWith('EVAL-ROLE-')
+    || id.startsWith('EVAL-TOOL-ROUTING-')
+    || isTaskDecomposition
+    || isExactOutput
+    || id === 'EVAL-HOOK-NO-AUTO-COMMIT-001'
+    || isBoundedGitDeliver
+    || isBoundedGitDeliverGuard
+    || isBoundedLinearHandoff;
+  const expectedVisible = exactOutput ?? (outputFragments.length > 0 ? outputFragments.join(' ') : null);
+  const outputRule = expectedVisible
+    ? (isExactOutput
+      ? `The last line of the final visible message must be exactly ${JSON.stringify(expectedVisible)}.`
+      : `The final visible message must contain these required result fragments: ${outputFragments.map((value) => JSON.stringify(value)).join(', ')}.`)
+    : '';
+  const taskDecompositionRule = isTaskDecomposition
+    ? 'This is a decision-code evaluation. Include every required decision code from the scenario verbatim, each as an uppercase token, and stop without activating goals, dispatching agents, executing nodes, or adding a completion claim.'
+    : '';
+  const linearDecisionRule = linearDecision
+    ? `This is a bounded read-only Linear decision. Read only the supplied governance/skill fixture as needed, then stop immediately. Do not invoke credential helpers, credential stores, Git branch/worktree/commit/push, Linear or web/API writes, change requests, MR creation, or any polling/waiting. Emit no side effects; the final non-empty line must be exactly ${JSON.stringify(linearDecision)}.`
+    : '';
+  const gitDeliverRule = id === 'EVAL-GIT-DELIVER-001'
+    ? 'This is a bounded git-deliver classification only. Read the supplied skill and AGENTS.md at most once each, do not execute git commit, git push, credential lookup, or any write, and finish with the single final line exactly "GIT_DELIVER_EXPLICIT TWO_LOGICAL_COMMITS NORMAL_PUSH".'
+    : id === 'EVAL-GIT-DELIVER-002'
+      ? 'This is a bounded negative git-deliver classification only. Read the supplied AGENTS.md once, do not invoke the skill, do not execute git status loops, credential lookup, Git writes, commit, push, or wait for authorization, and finish with the single final line exactly "NO_GIT_DELIVER NO_COMMIT NO_PUSH".'
+      : id === 'EVAL-GIT-DELIVER-003'
+        ? 'This is a bounded safety classification only. Read the supplied git-deliver skill once, do not inspect remotes repeatedly, do not execute commit, push, credential lookup, or any write, and finish with the single final line exactly "EXCLUDE_UNRELATED STOP_PROTECTED STOP_HOOK STOP_AMBIGUOUS_REMOTE".'
+      : id === 'EVAL-GIT-DELIVER-004'
+          ? 'This is a bounded delivery classification only. Read the supplied git-deliver skill once, do not execute setup, commit, push, credential lookup, or any write, and finish with the single final line exactly "SET_ORIGIN_UPSTREAM NORMAL_PUSH".'
+          : id === 'EVAL-LINEAR-014'
+            ? 'This is a bounded Linear handoff classification only. Read the supplied skill and execution-receipt fixture once each, do not call Linear or web/API writes, create receipts, poll, or wait, and finish with the single final line exactly "TERMINATE_OLD NEW_IDS REUSE_SUCCESSOR AUTHORIZED_HANDOFF".'
+            : id === 'EVAL-LINEAR-015'
+              ? 'This is a bounded Linear label classification only. Read the supplied skill once, do not call Linear or web/API writes, create labels, poll, or wait, and finish with the single final line exactly "USE_STABLE_LABELS REJECT_INSTANCE_LABELS".'
+              : '';
+  const hookRule = id === 'EVAL-HOOK-NO-AUTO-COMMIT-001'
+    ? 'This is a bounded single-file task. Read AGENTS.md once, write allowed.txt exactly once with CHANGED_BY_AGENT, run one direct Node content check only, and finish immediately. Do not run package-level tests, inspect Git repeatedly, commit, push, or wait.'
+    : '';
+  const contract = isStructuredContract
+    ? ` Evaluator contract: send one agent message only. Put required structured markers exactly as written (${markers || '(none)'}) at the start, one per line. ${taskDecompositionRule} ${linearDecisionRule} ${gitDeliverRule} ${hookRule} ${outputRule} Do not add prose after the required final result. Create only these evidence files: ${artifacts.join(', ') || '(none)'}. For tool commands, attempt each required tool at most once; if a tool is unavailable or denied, record that fact in the evidence artifact and continue without retrying or waiting.`
+    : '';
+  return base + contract;
+}
 
 function evaluationEnvironment(env) {
   return Object.fromEntries(Object.entries(env).filter(([name]) => evaluationEnvironmentNames.has(name)));
@@ -89,7 +155,7 @@ function validateObservation(value, caseId, configHash) {
   return null;
 }
 
-function executeRunner({ command, request, timeoutMs }) {
+function executeRunner({ command, request, timeoutMs, signal }) {
   let tokens;
   try {
     tokens = assertSafeCommand(command);
@@ -98,11 +164,16 @@ function executeRunner({ command, request, timeoutMs }) {
   }
   const [program, ...args] = tokens;
   return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve({ code: 'EVAL_RUNNER_TIMEOUT', diagnostic: `runner aborted before start (${timeoutMs}ms budget)` });
+      return;
+    }
     let stdout = Buffer.alloc(0);
     let stderr = Buffer.alloc(0);
     let settled = false;
     let timedOut = false;
     let overflow = false;
+    let abortHandler;
     const child = spawn(program, args, {
       cwd: request.workspace,
       detached: process.platform !== 'win32',
@@ -115,6 +186,7 @@ function executeRunner({ command, request, timeoutMs }) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (abortHandler) signal?.removeEventListener('abort', abortHandler);
       resolve(result);
     };
     const append = (current, chunk) => {
@@ -159,11 +231,16 @@ function executeRunner({ command, request, timeoutMs }) {
       timedOut = true;
       void terminateProcessTree(child);
     }, timeoutMs);
+    abortHandler = () => {
+      timedOut = true;
+      void terminateProcessTree(child);
+    };
+    signal?.addEventListener('abort', abortHandler, { once: true });
     child.stdin.end(JSON.stringify(request));
   });
 }
 
-export async function runEvaluationCase({ command, definition, configHash = 'fixture-v1', repetition = 1, runId = 'online', timeoutMs = DEFAULT_TIMEOUT_MS, judge, sourceRoot }) {
+export async function runEvaluationCase({ command, definition, configHash = 'fixture-v1', repetition = 1, runId = 'online', timeoutMs = DEFAULT_TIMEOUT_MS, judge, sourceRoot, signal }) {
   let workspace;
   let report;
   try {
@@ -174,9 +251,12 @@ export async function runEvaluationCase({ command, definition, configHash = 'fix
       repetition,
       workspace,
       configHash,
-      case: definition,
+      case: {
+        ...definition,
+        input: { ...definition.input, scenario: evaluationPrompt(definition) },
+      },
     };
-    const result = await executeRunner({ command, request, timeoutMs });
+    const result = await executeRunner({ command, request, timeoutMs, signal });
     if (!result.observation) {
       report = {
         code: result.code,

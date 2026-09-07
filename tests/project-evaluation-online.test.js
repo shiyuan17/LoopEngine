@@ -139,3 +139,62 @@ process.stdout.write(JSON.stringify({
     await rm(runner.directory, { recursive: true, force: true });
   }
 });
+
+test('online suite watchdog aborts active runners and records unstarted trials', async () => {
+  const project = await projectWithSuite();
+  const runner = await fakeRunner(`${runnerPrelude}
+setTimeout(() => {}, 60_000);
+`);
+  try {
+    const evaluationConfig = config(project, runner.command);
+    evaluationConfig.evaluations.onlineConcurrency = 2;
+    evaluationConfig.evaluations.onlineWallTimeMs = 100;
+    const result = await runProjectEvaluations({
+      campaignId: 'suite-watchdog-cleanup',
+      config: evaluationConfig,
+      mode: 'online', rootDir, suiteId: 'online-aggregate-test', targetDir: project,
+    });
+    assert.equal(result.status, 'degraded');
+    if (result.run) {
+      assert.equal(result.run.status, 'degraded');
+      assert.equal(result.run.attemptSummary.startedTrials >= 1, true);
+      assert.match(result.run.diagnostics.join('\n'), /watchdog|timed out|runner aborted/iu);
+    } else {
+      assert.equal(result.written.length, 0);
+      assert.match(result.warnings.join('\n'), /watchdog|timed out|runner aborted/iu);
+    }
+  } finally {
+    await rm(project, { recursive: true, force: true });
+    await rm(runner.directory, { recursive: true, force: true });
+  }
+});
+
+test('online evaluation applies case timeout overrides and fingerprints execution conditions', async () => {
+  const project = await projectWithSuite();
+  const runner = await fakeRunner(`${runnerPrelude}
+if (request.repetition === 2) setTimeout(() => {}, 5000);
+process.stdout.write(JSON.stringify({
+  schemaVersion: 1, caseId: request.case.id, runner: 'fake@1', model: 'fixture-model',
+  agentVersion: 'fixture-agent', configHash: request.configHash,
+  events: ['verified'], output: 'done', artifacts: [], exitCode: 0,
+  diagnostics: [], metrics: { durationMs: 1, tokenUsage: { totalTokens: 1 }, toolCalls: 0 },
+}));
+`);
+  try {
+    const evaluationConfig = config(project, runner.command);
+    evaluationConfig.evaluations.onlineConcurrency = 1;
+    evaluationConfig.evaluations.onlineWallTimeMs = 5000;
+    evaluationConfig.evaluations.onlineCaseWallTimeMsByCase = { 'EVAL-ONLINE-AGGREGATE-001': 1000 };
+    const result = await runProjectEvaluations({
+      campaignId: 'case-timeout-fingerprint',
+      config: evaluationConfig,
+      mode: 'online', rootDir, suiteId: 'online-aggregate-test', targetDir: project,
+    });
+    assert.equal(result.status, 'degraded');
+    assert.match(result.run.fingerprint.configHash, /^[a-f0-9]{64}$/u);
+    assert.equal(result.run.attempts.some((item) => item.code === 'EVAL_RUNNER_TIMEOUT'), true);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+    await rm(runner.directory, { recursive: true, force: true });
+  }
+});

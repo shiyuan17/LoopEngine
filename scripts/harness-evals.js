@@ -81,6 +81,15 @@ function requestedScenarios(args) {
   return typeof args.scenario === 'string' ? args.scenario.split(',').map((value) => value.trim()).filter(Boolean) : [];
 }
 
+function scenarioWallTimeMs(scenario, args) {
+  if (args['wall-time-ms'] !== undefined) {
+    const value = Number(args['wall-time-ms']);
+    if (!Number.isInteger(value) || value <= 0) throw new Error('--wall-time-ms must be a positive integer');
+    return value;
+  }
+  return ['H16', 'H18'].includes(scenario.id) ? 1_200_000 : 600_000;
+}
+
 async function hashPaths(baseDir, relativePaths) {
   const hash = createHash('sha256');
   async function visit(relative) {
@@ -282,6 +291,7 @@ async function runCommand(args) {
       throw new Error(`unknown pressure id for ${scenario.id}: ${args.pressure}`);
     }
     const fixtureManifest = await readFile(path.resolve(path.join(rootDir, 'harness-evals/scenarios'), scenario.fixture.ref), 'utf8');
+    const wallTimeMs = scenarioWallTimeMs(scenario, args);
     const fingerprint = {
       measurement: {
         scenarioHash: createHash('sha256').update(JSON.stringify(scenario)).digest('hex'),
@@ -295,6 +305,7 @@ async function runCommand(args) {
         repetitions: entry.scheduledAttempts,
         phase: experiment.phase,
         pressureId: requestedPressure?.id ?? null,
+        wallTimeMs,
       },
       harness: {
         aggregateHash: harnessHash,
@@ -327,7 +338,7 @@ async function runCommand(args) {
       });
       let execution;
       try {
-        execution = await runner.prepare({ scenario, fingerprint, condition: { tier: plan.tier, pressure: requestedPressure }, budget: { attemptLimit: 1, wallTimeMs: Number(args['wall-time-ms'] ?? 600_000) } });
+        execution = await runner.prepare({ scenario, fingerprint, condition: { tier: plan.tier, pressure: requestedPressure }, budget: { attemptLimit: 1, wallTimeMs } });
         await runner.run(execution.executionId, { phase: experiment.phase, pressure: requestedPressure });
         const collected = await runner.collect(execution.executionId);
         const attemptId = `attempt-${repetition}`;

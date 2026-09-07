@@ -395,4 +395,13 @@ test('compareFingerprints reports exact component mismatches', () => {
     match: false,
     mismatches: [{ field: 'model', actual: 'other', expected: 'fixture' }],
   });
+  const execution = {
+    suiteWallTimeMs: 1200000,
+    concurrency: 4,
+    defaultCaseWallTimeMs: 600000,
+    caseWallTimeMsByCase: { 'EVAL-LINEAR-021': 120000 },
+    repetitions: [{ id: 'EVAL-LINEAR-021', count: 3 }],
+  };
+  assert.equal(compareFingerprints({ ...expected, execution }, { ...expected, execution }).match, true);
+  assert.equal(compareFingerprints({ ...expected, execution: { ...execution, concurrency: 1 } }, { ...expected, execution }).mismatches[0].field, 'execution');
 });
