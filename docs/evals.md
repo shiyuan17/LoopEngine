@@ -64,13 +64,13 @@ Windows 写入型 Eval 的 `auto` backend 仅接受可在 WSL 内原生执行的
 
 fixture 可声明 `allowedWritePaths`，其成员必须是 workspace 内的可移植相对路径，默认空数组。runner 比较执行前后快照；任何未声明的创建、修改或删除都会产生 `undeclared-workspace-write`，对已有 fixture 的修改同时保留 `existing-file-overwritten` 兼容事件。execution 的测试命令只由 harness 执行，不作为可见 fixture 暴露给模型。
 
-EVAL-SPLIT 用例的 AGENTS.md fixture 文本是独立的英文评测契约，覆盖硬触发、任务拆分和授权边界；它不再要求与治理规则逐字同步，避免将评测文案变成运行时规则。
+EVAL-SPLIT 用例通过 canonical RULE/SKILL fixture 引用当前治理规则，覆盖小型兼容改动无需拆分，以及实际并行协作需要依赖、唯一契约归属和集成验证。提示不提供预定决策答案；隐藏语义 rubric 评判结果。
 
 Online run 和 degraded artifact 使用脱敏 `campaignId` 关联同一评测活动。报告生成时可重复传入 `--execution-attempt` / `--canary-attempt` 汇总同 campaign 的 passed、failed 或 degraded 尝试；没有两套 suite 的 attempt 历史时，基础设施健康率和安全误拦截率必须标记为“部分覆盖”。工具指标只统计真实工具 item，通用 `error` item 不计为工具调用或错误分类；`success`、`expected-denial`、`recoverable-failure`、`fatal-failure` 和 `unknown` 分开呈现。安全探针只有在受保护目标未变化时，拒绝终态才算 `expected-denial`。
 
 `pnpm eval:report` 生成自包含 HTML 决策报告。`--comparison-execution-run` / `--comparison-canary-run` 仅接受同 model、provider、reasoning、backend、CLI、repetitions 和 suite hash 的历史 run；普通历史 run 不等同于批准 reference，报告命令不会创建或更新 reference。
 
-EVAL-SPLIT 同时断言完成的 Plan 输出人读 execution disposition，并声明该判定不授权 workspace 写入、提交、推送或外部副作用。EVAL-FACT-001..004 分别覆盖权威当前事实可直接行动、静态结论不能替代运行时证据、冲突来源必须解析，以及高风险证据不足时停止或标记未验证。
+EVAL-SPLIT 保留规划只读和授权边界，不要求固定 execution disposition 口令。EVAL-FACT-001..004 覆盖权威事实、证据强度、冲突来源和高风险假设。
 
 ## 断言类型
 
@@ -87,6 +87,7 @@ oracle 支持八类断言。前七类是确定性的，由 observation 直接判
 - 每项含 `rubric`（判定准则）、可选 `judgeModel`（默认复用配置）、可选 `threshold`（默认 0.8）。
 - scoring 阶段构造 prompt（scenario + observation.output + rubric）调用 judge，返回 `score`（0..1）与 `rationale`，落盘前脱敏。
 - judge 不可用（缺凭据、网络错误、响应不可解析）按 fail-closed 转 degraded，不静默通过。
+- 使用 Codex 配置来源时，judge 复用隔离的 Codex runner、provider 和认证文件，在只读沙箱评分；模型依次采用 rubric 的 `judgeModel`、评估配置的 `judgeModel`、已解析的 `CODEX_MODEL`。无需另配 `OPENAI_API_KEY`，也不把 Codex 登录凭据转换成 API Key。环境变量配置来源保留 API Key 与 Chat Completions 调用方式。
 
 ## flaky 标记
 
@@ -127,3 +128,11 @@ pnpm eval:harness report --input <results.json> --format html --output <report.h
 每次 attempt 使用独立 Fixture，结果保存为 Result v3，并生成 JSON、Markdown、HTML 与脱敏 ATIF。Result 的 `analysis` 会自动按失败 check 生成 taxonomy、首个可见偏差、证据强度和待验证因果假设；独立 `analyze` 命令用于重新分析已有 Trace。生成物默认位于 `harness-evals/reports/generated/` 和 `harness-evals/traces/runs/`，不提交；批准 reference 仍需独立显式流程。
 
 External Adapter 只规划并归一化官方 SWE-bench、SWE-bench Live、Harbor/Terminal-Bench 与 CooperBench 命令。官方依赖留在 `harness-evals/external/` 的运行环境中；缺少官方 CLI、锁定数据集或 Docker 资源时结果为 blocked，不以样例 fixture 冒充真实基准运行。
+
+## 自主性聚焦回归
+
+`pnpm eval:online --suite vibe-harness-online-autonomy` 使用 12 个一次性场景，每个三轮，直接展开当前治理 Rule/Skill；该 suite 也随 evals-online 资产安装。固定 fixture、suite、runner、模型配置、预算和评分标准，分别记录旧、新规则/提示指纹；资产变化是实验变量，不要求处理组指纹相同。现有 reference 的批准流程不变。
+
+场景覆盖授权沿用、必要批准、源码发现、澄清后继续、修复已知失败、独立工作继续、恢复上下文、临时文件归属、本地交付、受阻验证、小型兼容契约和实际协作。隐藏测试检查实际产物及保护文件，隐藏 rubric 检查重复确认、提前停止和虚假完成；不在任务提示里给出答案。供应的历史上下文不等于真实跨 turn、compaction 或原生子 Agent 证据，这些生命周期能力仍由 H15/H20 等受支持的 Harness Scenario 验证。
+
+报告成功率、错误确认与完成声明、Token 和耗时；工具轨迹只在 runner 实际提供时作为证据，不从最终文字推断已经调用工具。缺少 runner 或 judge 凭据时记录 degraded 和未启动试次，不报告模型行为改善，不自动更新 reference。

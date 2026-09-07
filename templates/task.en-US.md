@@ -22,13 +22,13 @@
 
 ## Execution disposition
 
-> When a Plan is complete, record one line: direct implementation / split implementation, with the triggering rationale; when implementation tasks depend on one another, declare those dependencies. This disposition does not authorize workspace writes, commits, pushes, or external effects.
+> Record the rationale for direct or split implementation only when useful; it is not required for every Plan. Declare necessary dependencies when collaborating. This disposition grants no new authority, and host Plan mode remains read-only.
 
 > Use `task-decomposition` when an existing plan needs a Goal, Task DAG, and host-neutral node execution prompts. Keep the result copyable in the response by default; write it here only when long-task recovery needs a durable note.
 
 ## Implementation task split (complete only when the plan is split)
 
-> Complete this table when the plan split judgment selects splitting; each task must be independently executable, verifiable, and committable. Vibe-Harness does not parse it or use it as a completion gate.
+> Complete this table when dependencies, isolation, or independent parallel work justify splitting; each task needs a clear result and verification, not a separate commit. Vibe-Harness does not parse it or use it as a completion gate.
 
 | Task | Goal | Depends on | Change scope | Constraints | Acceptance criteria | Verification | Output |
 |---|---|---|---|---|---|---|---|
