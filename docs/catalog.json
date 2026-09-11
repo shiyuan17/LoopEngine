@@ -622,6 +622,17 @@
       ]
     },
     {
+      "path": "docs/adr/ADR-0004-task-decomposition-governance.md",
+      "kind": "architecture",
+      "status": "current",
+      "language": "en",
+      "audiences": [
+        "contributor",
+        "maintainer",
+        "auditor"
+      ]
+    },
+    {
       "path": "docs/adr/catalog.json",
       "kind": "index",
       "status": "current",

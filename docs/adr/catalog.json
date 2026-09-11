@@ -12,6 +12,10 @@
     {
       "id": "ADR-0003",
       "path": "docs/adr/ADR-0003-lightweight-gitflow.md"
+    },
+    {
+      "id": "ADR-0004",
+      "path": "docs/adr/ADR-0004-task-decomposition-governance.md"
     }
   ]
 }

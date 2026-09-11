@@ -11,6 +11,7 @@
 - **ADR-0001** Linear 显式执行身份与原生 DAG 契约 - accepted - 禁止自动领单，分离 Assignee、Delegate 与运行实例，并使用原生关系和追加式 Receipt - [ADR](../adr/ADR-0001-linear-explicit-execution-and-dag.md)
 - **ADR-0002** Linear Execution Envelope、恢复与交付边界 - accepted - 将授权、副作用、恢复检查点和终止条件固化为宿主可持久化契约 - [ADR](../adr/ADR-0002-linear-execution-envelope-and-recovery.md)
 - **ADR-0003** 开发集成与发布提升的轻量 GitFlow - accepted - 使用短期任务分支、develop 集成、main 发布和自动回同步分离开发完成与正式发布 - [ADR](../adr/ADR-0003-lightweight-gitflow.md)
+- **ADR-0004** 任务拆分治理与 DAG 状态一致性 - accepted - 保持单 Agent 快车道，统一本地与 Linear DAG 状态，要求共享契约唯一写入者和 write 派发前重验证 - [ADR](../adr/ADR-0004-task-decomposition-governance.md)
 
 ## 纪律
 
