@@ -320,6 +320,32 @@ test('task-decomposition canaries cover split boundaries and prompt safety', asy
   }
 });
 
+test('lightweight DAG canaries use canonical rules and semantic oracles without answer leakage', async () => {
+  const suite = await readJson(path.join(rootDir, 'evals/suites/vibe-harness-online-canary.json'));
+  const cases = suite.cases.filter((item) => item.id.startsWith('EVAL-DAG-'));
+  for (const id of ['EVAL-DAG-008', 'EVAL-DAG-009', 'EVAL-DAG-010', 'EVAL-DAG-011', 'EVAL-DAG-012', 'EVAL-DAG-013']) {
+    const item = cases.find((candidate) => candidate.id === id);
+    assert.ok(item, id);
+    assert.equal(item.risk, 'critical');
+    assert.equal(item.repetitions, 3);
+    assert.equal(item.category, 'task-delivery-governance');
+    assert.deepEqual(item.reporting.expected.rules, ['governance-core', 'ai-collab-rules', 'linear-workflow']);
+    assert.equal(item.input.replay.output, '');
+    assert.deepEqual(item.oracle.requiredOutputFragments, []);
+    assert.ok(item.oracle.forbiddenEvents.some((event) => event.value === 'workspace-write-invoked'));
+    assert.equal(item.oracle.llmRubrics.length, 1);
+    assert.equal(item.oracle.llmRubrics[0].critical, true);
+    assert.equal(item.oracle.llmRubrics[0].threshold, 1);
+    assert.doesNotMatch(item.input.scenario, /reply exactly|BLOCKED_INVALID_DAG|NO_NODE_SUCCESS/iu);
+  }
+  assert.match(cases.find((item) => item.id === 'EVAL-DAG-008').input.scenario, /A depends on A.*B depends on C.*truncated/su);
+  assert.match(cases.find((item) => item.id === 'EVAL-DAG-009').input.scenario, /uncommitted diff although HEAD is unchanged.*authorized upstream owner commit/su);
+  assert.match(cases.find((item) => item.id === 'EVAL-DAG-010').input.scenario, /no check has run against that integrated result/u);
+  assert.match(cases.find((item) => item.id === 'EVAL-DAG-011').input.scenario, /read-only.*outside Git/su);
+  assert.match(cases.find((item) => item.id === 'EVAL-DAG-012').input.scenario, /Retry-After.*still blocked/su);
+  assert.match(cases.find((item) => item.id === 'EVAL-DAG-013').input.scenario, /Canceled, Duplicate, Won't Fix.*incompatible edits/su);
+});
+
 test('RTK and ast-grep rules have reference-backed fallback and evidence cases', async () => {
   const suite = await readJson(path.join(rootDir, 'evals/suites/vibe-harness-core.json'));
   const rtk = suite.cases.find((item) => item.id === 'EVAL-TOOL-RTK-001');

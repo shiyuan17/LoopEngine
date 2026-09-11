@@ -58,6 +58,11 @@ test('lightweight Task DAG is optional and defines deterministic collaboration s
   assert.match(collaboration, /最多尝试三次.*Retry-After/u);
   assert.match(collaboration, /权限和安全拒绝不得重试绕过.*确定性测试失败先修复再验证/u);
   assert.match(collaboration, /最后一次实质写入后运行集成验证/u);
+  for (const state of ['pending', 'ready', 'running', 'succeeded', 'failed', 'blocked', 'skipped', 'cancelled']) {
+    assert.match(collaboration, new RegExp(state, 'u'));
+  }
+  assert.match(collaboration, /每次派发 write 节点前重新确认 DAG 版本或 hash/u);
+  assert.match(collaboration, /子 Agent 交接至少报告节点结果/u);
 });
 
 test('task templates and installed projection expose the same optional collaboration graph', async () => {
@@ -101,6 +106,12 @@ test('capability catalog and online canary register lightweight Task DAG coverag
     'EVAL-DAG-005',
     'EVAL-DAG-006',
     'EVAL-DAG-007',
+    'EVAL-DAG-008',
+    'EVAL-DAG-009',
+    'EVAL-DAG-010',
+    'EVAL-DAG-011',
+    'EVAL-DAG-012',
+    'EVAL-DAG-013',
   ]);
   assert.equal(cases.every((item) => item.risk === 'critical' && item.repetitions === 3), true);
 });
@@ -163,4 +174,18 @@ test('Linear projection preserves native DAG dependency and fan-in semantics', a
   assert.match(linear, /Parent.*不得 Done/u);
   assert.match(collaboration, /all_done.*不得把失败图改判为成功/u);
   assert.match(collaboration, /相同 resourceLocks.*唯一节点负责写入/u);
+  assert.match(collaboration, /路径不重叠但存在接口、Schema、迁移或行为契约耦合/u);
+});
+
+test('DAG states, ownership and handoff evidence remain bounded human contracts', async () => {
+  const text = await readFile(path.join(rootDir, 'docs/rules/ai-collab-rules.md'), 'utf8');
+  assert.match(text, /这四种状态不是终态/u);
+  assert.match(text, /all_done 不得把仍 blocked 的节点视为已终结/u);
+  assert.match(text, /未提交写入也会改变输入/u);
+  assert.match(text, /不要求 HEAD 永远等于 initial HEAD/u);
+  assert.match(text, /先只读补证或请原节点补充/u);
+  assert.match(text, /不适用及原因.*不得伪造退出码/u);
+  assert.match(text, /超时、预算耗尽.*记为 blocked/u);
+  assert.match(text, /实际 running 的读写节点/u);
+  assert.match(text, /两个消费方读取同一已稳定契约并不等于两个共享契约写入者/u);
 });
