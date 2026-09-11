@@ -34,9 +34,13 @@ Ready、Todo、依赖满足或队列可见不是 execute 授权。当前请求�
 
 分页不完整、关系不可见、Receipt 无法解析或记录互相矛盾时 fail-closed。不得推断不存在的字段、关系、权限或评论。不要读取无关团队或扩大搜索范围。Triage Issue 只读解释，不自动 accept、duplicate、decline 或 snooze。
 
-同一用户请求最多做一次全项目 DAG 全量遍历。首次完整读取后保存 dagStructureHash，覆盖节点 ID、Parent/依赖边、kind、trigger、Scope、Resource Locks、Repository 和 Target branch；提供方支持变化游标时另存可选 dagChangeCursor。压缩恢复时，只有二者共同证明结构未变，才重读当前 Issue、PR/MR、HEAD 和变化节点；禁止再次逐项读取整张 DAG。没有可用 dagChangeCursor 或无法证明完整性与变化边界时 fail-closed，不得仅凭旧哈希跳过校验。
+同一用户请求优先读取当前 Issue 及其必要依赖和冲突范围，保存 dagStructureHash，覆盖节点 ID、Parent/依赖边、kind、trigger、Scope、Resource Locks、Repository 和 Target branch；提供方支持时另存 dagChangeCursor。只有摘要与可靠游标共同证明结构未变，恢复才采用当前 Issue、PR/MR、HEAD 和变化节点的增量读取。无可靠游标时允许一次有界重读相关完整范围，仍不完整则暂停受影响执行；旧哈希本身不是未变证据，不扫描 Ready Queue 或反复遍历全项目。
 
 ## 3. 执行 Ready 与 DAG 门禁
+
+本地 `result` 使用 `pending`、`ready`、`running`、`succeeded`、`failed`、`blocked`、`skipped`、`cancelled`；Linear 的 `Canceled`、`Duplicate`、`Won't Fix` 只作为外部终态并按非 `succeeded` 处理。
+
+具体映射与终态以 ai-collab-rules.md「状态与交接解释」为准：Canceled / Won't Fix 映射 cancelled，Duplicate 映射 skipped，blocked 非终态，Done 必须具有对应 kind 的证据。本地解释不新增 Linear 字段，也不回写状态。
 
 只有 Todo Issue 才能开始，并且必须满足：
 
@@ -52,6 +56,8 @@ Parent/Sub-issue 只表示分解，related 不表示依赖。文本声明依赖�
 all_success 要求全部直接前驱成功；Canceled、Duplicate、Won't Fix、failed、skipped 和 cancelled 均不算成功。all_done 只允许 kind=aggregate，且仅用于汇总、清理或失败报告；它可以产出终态报告，但不能把失败 DAG 判为成功。
 
 Ready 门禁通过后解析目标远端 ref 并冻结 base SHA；后续分支和 worktree 必须从该基线创建。Ready 仍不授权执行任何未列入 allowedEffects 的动作。
+
+路径不重叠但存在 API、Schema、迁移或行为契约耦合时，必须指定唯一写入 owner 并建立原生依赖；无法证明隔离时按冲突处理。每次派发 write 节点前重新读取并确认 DAG 版本或 hash、依赖、Scope、Resource Lock、HEAD 和工作区身份未变化；变化时暂停后继并重新计算 ready 集合。
 
 ## 4. 登记 Agent 与 Execution Receipt
 
@@ -92,6 +98,10 @@ Linear 只读、MCP 不可用或写入验证失败时，不得声称已登记、
 Git credential helper 按 git-rules.md credential helper 条款执行：只能由已配置的 Git transport 透明使用，读取、解析或转用其输出登录网页/API 需要单独的 credentialUse 与对应外部写入授权；Agent 不得把 helper 输出或原始凭据写入文件，query、包装脚本或辅助文件不得写入仓库或 worktree。
 
 默认在当前 Issue 的已授权 effects 完成时终止：若授权到 mergeRequestWrite，则 PR/MR ready for review、创建后重读确认并完成已授权证据同步时结束。Linear 未进入 In Review 且状态同步不可用或未授权时，报告差异后结束。除非 envelope 明确为 monitor 且带观察终点或时间边界，不等待人工合并、不持续轮询，也不续跑下一节点；终止不等于 Linear Done。
+
+子节点交接至少记录节点结果、实际修改文件、base/head、验证命令与退出码、未决风险和阻塞原因；这些记录仅用于人读交接，不构成执行授权。长任务可选声明节点超时、最大尝试次数、取消、退避和资源预算，普通单 Agent 任务不要求填写。
+
+交接缺证先补证，不按自报判成功；非 Git、只读或人工验证按 ai-collab-rules.md 说明不适用项，不伪造 SHA 或退出码。正常上游 HEAD 前进需核对实际 diff 和依赖证据后更新观察基准，不修改授权基线；超时、取消和预算耗尽均不算成功，不自动回收原执行。并发软上限依 ai-collab-rules.md 区分本地 running 节点和 Linear 活跃 Issue，不能覆盖宿主硬限制。
 
 ## 7. 交付与参考
 

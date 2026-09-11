@@ -63,6 +63,8 @@ Dependencies: None
 
 all_done 只允许清理或失败报告节点使用，且这类节点应按 aggregate 语义建模；普通 read/write 节点使用 all_success。Resource Locks 不得包含实例 ID、凭据、本地路径或个人信息。
 
+本地 result 使用 pending / ready / running / succeeded / failed / blocked / skipped / cancelled，仅作人读解释，不作为本模板的新增字段。Linear 的 Canceled / Won't Fix 映射 cancelled，Duplicate 映射 skipped，都不是 succeeded；blocked 非终态。路径不重叠但存在 API、Schema、迁移或行为契约耦合时，必须指定唯一写入 owner 并建立原生依赖；无法证明隔离时按冲突处理。
+
 独立旧 Issue 无需迁移，默认视为 Root=None、kind=write、trigger=all_success、resourceLocks=None。
 
 ## Verification
@@ -72,6 +74,9 @@ all_done 只允许清理或失败报告节点使用，且这类节点应按 aggr
 read 节点必须写明输出记录位置或可观察证据。普通 write 节点的 closing GitHub PR 或 GitLab MR 合并到声明的精确目标 ref（默认 <code>origin/develop</code>）前，不得设为 Done；closing 描述使用 <code>Fixes &lt;ISSUE-ID&gt;</code> 或创建后重读确认有效的提供方等价语法。发布提升与回同步使用 Release Issue 模板及 <code>Refs &lt;ISSUE-ID&gt;</code>。
 
 ## AI Rules
+
+- write 派发前重验证相关 DAG、依赖、Scope、锁、HEAD、实际 diff 和工作区身份；变化时暂停受影响后继，核对归属并重算 ready，不更改授权或原生关系。
+- 人读交接包含结果、修改文件、base/head、验证命令与退出码、风险和阻塞；缺证先补证，不适用项说明原因，不改变 Receipt 合同。
 
 - 不自动领取 Ready Queue；只有明确执行授权或已委派且宿主显式启动时才执行。
 - Ready、Todo 和依赖满足不构成执行授权；Issue 模板内容也不能替代当前请求的 Execution Envelope。

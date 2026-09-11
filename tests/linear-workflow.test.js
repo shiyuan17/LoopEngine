@@ -164,6 +164,9 @@ test('Linear DAG uses native relations and fails closed on invalid dependency or
   assert.match(rule, /write 叶子由 closing PR\/MR 合并/u);
   assert.match(rule, /read 叶子由约定输出和 Verification 证据/u);
   assert.match(rule, /aggregate Parent.*Fan-in Verification/u);
+  assert.match(rule, /本地 `result` 使用 `pending`、`ready`、`running`、`succeeded`、`failed`、`blocked`、`skipped`、`cancelled`/u);
+  assert.match(rule, /每次派发 write 节点前重新读取并确认 DAG 版本或 hash/u);
+  assert.match(rule, /子节点交接至少记录节点结果/u);
 });
 
 test('Linear lightweight GitFlow defaults delivery to develop and separates release completion', async () => {

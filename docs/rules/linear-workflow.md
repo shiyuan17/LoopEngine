@@ -32,6 +32,10 @@ Agent 手工写状态必须执行“读取当前值 -> 校验允许转换 -> 写
 
 ## Definition of Ready 与原生 DAG
 
+本地 `result` 使用 `pending`、`ready`、`running`、`succeeded`、`failed`、`blocked`、`skipped`、`cancelled`；Linear 的 `Canceled`、`Duplicate`、`Won't Fix` 只保留为外部终态，并统一按非 `succeeded` 处理。
+
+状态映射与终态、交接缺失和正常 HEAD 前进的处理统一遵循 `ai-collab-rules.md` 的「状态与交接解释」：Canceled / Won't Fix 映射 cancelled，Duplicate 映射 skipped；blocked 非终态，Done 无对应 kind 的证据不得映射 succeeded。本地 result 不增加 Linear 描述字段或第二状态真值。派发重验证只读取当前节点及足够的依赖/冲突范围，不能因此扫描 Ready Queue。
+
 Todo Issue 必须包含 Goal、Context、Repository、精确 Target branch ref、Scope、Out of Scope、Contract、Acceptance Criteria、Dependencies 和 Verification。Target branch 必须能解析到准确远端 ref；“默认分支”只有经仓库事实解析为实际实现基线时才有效，否则返回 NOT_READY_TARGET_BRANCH。Dependencies 只能是 None 或 Managed by Linear relations；描述中的明确依赖陈述必须与原生关系一致，否则不 Ready。Parent/Sub-issue 只表示分解，不隐含顺序；blocked-by / blocks 是唯一执行依赖，related 不进入 DAG。
 
 DAG 节点可声明 kind（read / write / aggregate）、trigger（all_success / all_done）和 resourceLocks。无 Parent 的旧 Issue 使用上述默认值；有子 Issue 的 Parent 必须是 aggregate。all_success 要求全部直接前驱 succeeded，Canceled、Duplicate、Won't Fix、failed、skipped 或 cancelled 都不算成功。all_done 只允许 aggregate、清理或失败报告节点在全部直接前驱终结后运行，且不能把失败 DAG 或 Root 判为成功。
@@ -43,6 +47,8 @@ DAG Parent 模板包含 Goal、整体 Acceptance Criteria、Shared Contract、Ou
 同一用户请求优先读取当前 Issue 及其必要依赖范围，并保存 dagStructureHash；提供方支持变化游标时另存可选 dagChangeCursor。恢复时只有摘要与游标共同证明结构未变化，才只读取当前 Issue、PR/MR、HEAD 与变化节点；没有可靠游标或无法证明变化边界时，允许一次有界重新读取相关完整范围，仍不得无目的轮询或无限重复全量读取。
 
 无 Parent、Dependencies=None 且 resourceLocks=None 的独立 Issue 使用单任务快车道：只读取当前 Issue、完整 Receipt 生命周期和直接关系，不得为此执行全项目 DAG 遍历。发现 Parent、直接依赖、非空 Resource Locks、Scope 冲突线索或关系读取不完整时退出快车道，再按上述 DAG 门禁读取足够范围。
+
+路径不重叠但存在 API、Schema、迁移或行为契约耦合时，必须指定唯一写入 owner 并建立原生依赖；无法证明隔离时按冲突处理。每次派发 write 节点前重新读取并确认 DAG 版本或 hash、依赖、Scope、Resource Lock、HEAD 和工作区身份未变化；变化时暂停后继并重新计算 ready 集合。子节点交接至少记录节点结果、实际修改文件、base/head、验证命令与退出码、未决风险和阻塞原因；这些记录仅用于人读交接，不构成执行授权。
 
 ## 显式执行登记
 
@@ -80,4 +86,4 @@ Git credential helper 按 `git-rules.md` credential helper 条款执行：helper
 
 默认 terminalCondition 是当前 Issue 的已授权 effects 完成：本地实现只交付到本地验证；若授权到 mergeRequestWrite，则在 PR/MR ready for review、创建后重读确认并完成所有已授权证据同步时结束。Linear 自动化或已授权回写应使 Issue 进入 In Review；若状态同步不可用或未授权，报告差异后结束，不得因此续跑。除非用户明确授权 mode=monitor 并给出观察终点或时间边界，否则不得等待人工合并、持续轮询、自动续跑或执行下一个 Ready 节点；达到终止条件也不等于 Done。
 
-推荐 Writer In Progress 不超过 3、In Review 不超过 2。AI Ready Queue 只供人查看和显式选择；Agent 不读取它来挑选工作。
+推荐 Writer In Progress 不超过 3、In Review 不超过 2，作为 Linear 工作流软上限；它与本地 Task DAG 的默认并发建议分开计算，并可由宿主、API 限流和项目资源覆盖。长任务可选声明超时、最大尝试次数、取消、退避和资源预算；AI Ready Queue 只供人查看和显式选择，Agent 不读取它来挑选工作。
