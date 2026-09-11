@@ -8,10 +8,10 @@ import { loadAllManifests, readJson } from '../scripts/lib/manifest.js';
 import { scanForForbiddenTerms } from '../scripts/lib/redaction.js';
 
 const rootDir = path.resolve(import.meta.dirname, '..');
-const coreSkills = ['clarify-requirements', 'define-goal', 'task-decomposition', 'git-deliver', 'systematic-debugging', 'eval-driven-development', 'security-and-hardening'];
+const coreSkills = ['clarify-requirements', 'define-goal', 'task-decomposition', 'git-deliver', 'systematic-debugging', 'bug-finding', 'eval-driven-development', 'security-and-hardening'];
 const fullSkills = [...coreSkills, 'api-and-interface-design', 'frontend-design', 'runtime-cross-repo-rollout'];
 
-test('canonical governance and ten native Skills are declared without a Router', async () => {
+test('canonical governance and eleven native Skills are declared without a Router', async () => {
   const manifests = await loadAllManifests(rootDir);
   const rules = new Set(manifests.rules.items.map((item) => item.id));
   for (const id of ['governance-core', 'git-rules', 'test-rules', 'agent-skill-routing']) assert.equal(rules.has(id), true);
@@ -156,7 +156,7 @@ test('generic rules constrain process while retaining safety boundaries', async 
   assert.match(rules['log-management'], /不替代目标项目的日志或遥测契约/u);
 });
 
-test('profiles install zero, seven, or ten native Skills at intended tiers', async () => {
+test('profiles install zero, eight, or eleven native Skills at intended tiers', async () => {
   for (const [profile, expected] of [['minimal', []], ['docs-only', []], ['core', coreSkills], ['full', fullSkills]]) {
     const plan = await createInstallPlan({ dryRun: true, profile, rootDir, targetDir: path.join(rootDir, `.tmp-depth-${profile}`) });
     const targets = new Set(plan.actions.map((item) => item.relativeTarget));

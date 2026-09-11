@@ -348,7 +348,7 @@ test('minimal profile installs the fallback kernel without skills', async () => 
   }
 });
 
-test('core profile installs seven native skills without mcp, memory, or hooks', async () => {
+test('core profile installs eight native skills without mcp, memory, or hooks', async () => {
   const { report, target } = await initAndDryRunProfile('core');
   try {
     const targets = targetsFrom(report);

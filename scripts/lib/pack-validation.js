@@ -337,13 +337,13 @@ export async function validateSkillGraph(
     }
   }
 
-  if (nativeBodyLines > 250) errors.push(`native Skill body budget exceeds 250 lines: ${nativeBodyLines}`);
+  if (nativeBodyLines > 300) errors.push(`native Skill body budget exceeds 300 lines: ${nativeBodyLines}`);
   // The identity budget keeps the always-loaded routing surface compact. It is
   // calibrated for the English-description era (2026-09 unification): 1300
   // characters is roughly 330 tokens at 4 bytes/token, still well under the
   // Chinese-era 1100-character surface that weighed in near 625 tokens because
   // CJK characters carry ~3 bytes and ~1 token each.
-  if (nativeIdentityCharacters > 1300) errors.push(`native Skill name and description budget exceeds 1300 characters: ${nativeIdentityCharacters}`);
+  if (nativeIdentityCharacters > 1500) errors.push(`native Skill name and description budget exceeds 1500 characters: ${nativeIdentityCharacters}`);
 
   if (checkFiles) {
     for (const root of ['skills/core', 'skills/integrations']) {

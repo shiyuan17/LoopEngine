@@ -560,6 +560,24 @@
       "contentStrategy": "replace"
     },
     {
+      "group": "skills-core",
+      "source": "skills/core/bug-finding/SKILL.md",
+      "target": ".agents/skills/bug-finding/SKILL.md",
+      "contentStrategy": "replace"
+    },
+    {
+      "group": "skills-core",
+      "source": "skills/core/bug-finding/metadata.json",
+      "target": ".agents/skills/bug-finding/metadata.json",
+      "contentStrategy": "replace"
+    },
+    {
+      "group": "skills-core",
+      "source": "skills/core/bug-finding/agents/openai.yaml",
+      "target": ".agents/skills/bug-finding/agents/openai.yaml",
+      "contentStrategy": "replace"
+    },
+    {
       "group": "skills-browser",
       "source": "skills/integrations/browser-verification/SKILL.md",
       "target": ".agents/skills/browser-verification/SKILL.md",
